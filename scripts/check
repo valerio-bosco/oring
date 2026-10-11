@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# The oring pipeline. Run from anywhere; exits non-zero on the first failing stage.
+#
+#   scripts/check          fast: syntax + test suite                     (~30 s)
+#   scripts/check full     fast + `nix flake check` (package build + tests in the Nix sandbox)
+#                          + panel load test, if a Wayland session is available
+#
+# Environment: ORING_PYTHON (Python with mcp, httpx, pytest), ORING_QUICKSHELL; both are built
+# from the flake when unset.
+set -euo pipefail
+cd "$(dirname "$(readlink -f "$0")")/.."
+mode=${1:-fast}
+
+stage() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
+ok()    { printf '\033[32mOK\033[0m %s\n' "$*"; }
+
+python=${ORING_PYTHON:-$(nix build --no-link --print-out-paths .#dev-python)/bin/python}
+
+stage "syntax"
+"$python" -m compileall -q oring mcp tests >/dev/null
+bash -n bin/oring scripts/check scripts/dev
+find . -name __pycache__ -prune -exec rm -rf {} +
+ok "python and shell scripts parse"
+
+stage "tests"
+"$python" -m pytest -q -p no:cacheprovider tests
+
+if [ "$mode" = full ]; then
+  stage "nix flake check"
+  nix flake check --no-warn-dirty -L 2>&1 | tail -5
+  ok "package builds, tests pass in the sandbox"
+
+  stage "panel"
+  if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    quickshell=${ORING_QUICKSHELL:-$(nix build --no-link --print-out-paths .#dev-quickshell)/bin/quickshell}
+    log=$(mktemp)
+    # a socket nobody listens on: the panel must load and show "daemon unreachable", not crash
+    ORING_SOCKET=$(mktemp -u) timeout 4 "$quickshell" -p ui/shell.qml >"$log" 2>&1 || true
+    if grep -E 'ERROR|TypeError|ReferenceError|is not a type|Cannot assign' "$log"; then
+      echo "panel failed to load, full log: $log"; exit 1
+    fi
+    grep -q 'Configuration Loaded' "$log" || { echo "panel did not load, full log: $log"; exit 1; }
+    rm -f "$log"
+    ok "panel loads without QML errors"
+  else
+    echo "skipped: no Wayland session (WAYLAND_DISPLAY unset)"
+  fi
+fi
+
+stage "done ($mode)"

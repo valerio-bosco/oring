@@ -41,15 +41,19 @@ def state_dir() -> Path:
     return d
 
 
-def runtime_dir() -> Path:
-    base = Path(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}")
-    d = base / "oring"
-    d.mkdir(parents=True, exist_ok=True, mode=0o700)
-    return d
-
-
 def socket_path() -> Path:
-    return runtime_dir() / "daemon.sock"
+    """$ORING_SOCKET, or $XDG_RUNTIME_DIR/oring/daemon.sock. A separate socket (scripts/dev) gives a
+    separate daemon: its runtime files live next to the socket."""
+    if os.environ.get("ORING_SOCKET"):
+        path = Path(os.environ["ORING_SOCKET"])
+    else:
+        path = Path(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}") / "oring" / "daemon.sock"
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    return path
+
+
+def runtime_dir() -> Path:
+    return socket_path().parent
 
 
 def load() -> dict:

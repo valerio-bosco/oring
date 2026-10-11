@@ -84,6 +84,18 @@ Sign in to each agent once from a terminal (`claude`, `gemini`, `codex login`, â
 
 Panel environment variables: `ORING_WIDTH`, `ORING_MARGIN_TOP`, `ORING_FONT`.
 
+## Development
+
+Start with [`AGENTS.md`](AGENTS.md): it is written for coding agents and humans alike. The plan is
+in [`docs/PLAN.md`](docs/PLAN.md), decisions and gotchas in [`docs/MEMORY.md`](docs/MEMORY.md),
+test procedures in [`.claude/skills/`](.claude/skills).
+
+```sh
+scripts/check          # syntax + test suite (fake agents, no desktop access)
+scripts/check full     # + nix flake check + panel load test
+scripts/dev start      # isolated instance from the working tree; scripts/dev toggle / oring / stop
+```
+
 ## Status
 
 Early (0.1). The desktop MCP server's tools and descriptions are currently in Italian.

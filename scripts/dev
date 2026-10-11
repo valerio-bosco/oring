@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# A development oring, from the working tree, isolated from the installed one: own socket,
+# state and config under $ORING_DEV (default /tmp/oring-dev-$USER). Needs the graphical session
+# (run it as the desktop user, from a terminal inside Hyprland).
+#
+#   scripts/dev start [config.toml]   start daemon + panel (config: default dev config, see below)
+#   scripts/dev stop                  stop both
+#   scripts/dev status                processes, socket, last log lines
+#   scripts/dev toggle                show/hide the dev panel
+#   scripts/dev oring <args>          run an oring command against the dev daemon
+#                                     (e.g. `scripts/dev oring send --auto deny "hi"`)
+#   scripts/dev shot [file.png]       screenshot of the panel area (grim)
+#   scripts/dev env                   print the environment, for `eval "$(scripts/dev env)"`
+#
+# Default dev config: OpenCode (free model, ACP) and Claude Code, Italian, desktop MCP on.
+set -euo pipefail
+repo=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+dev=${ORING_DEV:-/tmp/oring-dev-$(id -un)}
+mkdir -p "$dev"
+
+export ORING_SOCKET=$dev/daemon.sock
+export XDG_STATE_HOME=$dev/state
+export ORING_CONFIG=${ORING_CONFIG_DEV:-$dev/config.toml}
+# tools built from the flake once, then remembered (delete $dev/tools after changing flake.nix)
+if [ ! -f "$dev/tools" ]; then
+  printf '%s\n%s\n' "$(cd "$repo" && nix build --no-link --print-out-paths .#dev-python 2>/dev/null)/bin/python" \
+    "$(cd "$repo" && nix build --no-link --print-out-paths .#dev-quickshell 2>/dev/null)/bin/quickshell" >"$dev/tools"
+fi
+export ORING_PYTHON=${ORING_PYTHON:-$(sed -n 1p "$dev/tools")}
+export ORING_QUICKSHELL=${ORING_QUICKSHELL:-$(sed -n 2p "$dev/tools")}
+# the agents installed for the oring service (programs.oring.extraPackages) are on its PATH only
+service_path=$(systemctl --user show oring -p Environment --value 2>/dev/null | tr ' ' '\n' | sed -n 's/^PATH=//p')
+[ -n "$service_path" ] && export PATH=$PATH:$service_path
+oring=$repo/bin/oring
+
+default_config() {
+  cat <<CONF
+language = "it"
+[[agents]]
+id = "opencode"
+name = "OpenCode"
+type = "acp"
+command = "opencode acp"
+[[agents]]
+id = "claude"
+name = "Claude"
+type = "claude-cli"
+CONF
+}
+
+pids() { pgrep -u "$(id -u)" -f "$1" || true; }
+daemon_pids() { for p in $(pids '[o]ring daemon'); do tr '\0' '\n' </proc/$p/environ 2>/dev/null | grep -qx "ORING_SOCKET=$ORING_SOCKET" && echo $p; done; }
+panel_pids() { pids "[q]uickshell -p $repo/ui/shell.qml"; }
+
+case "${1:-}" in
+  start)
+    [ -n "${2:-}" ] && cp "$2" "$dev/config.toml"
+    [ -f "$ORING_CONFIG" ] || default_config >"$ORING_CONFIG"
+    # setsid -f: detached right away, so the caller's output is not held open
+    [ -n "$(daemon_pids)" ] || setsid -f "$oring" daemon >>"$dev/daemon.log" 2>&1 </dev/null
+    [ -n "$(panel_pids)" ] || setsid -f "$oring" ui >>"$dev/ui.log" 2>&1 </dev/null
+    for _ in $(seq 50); do [ -S "$ORING_SOCKET" ] && break; sleep 0.1; done
+    [ -S "$ORING_SOCKET" ] || { echo "daemon did not start:"; tail -20 "$dev/daemon.log"; exit 1; }
+    echo "dev oring running ($dev). Panel: scripts/dev toggle" ;;
+  stop)
+    for p in $(daemon_pids) $(panel_pids); do kill "$p"; done
+    for _ in $(seq 50); do [ -z "$(daemon_pids)$(panel_pids)" ] && break; sleep 0.1; done
+    [ -z "$(daemon_pids)$(panel_pids)" ] && echo stopped || { echo "still running: $(daemon_pids) $(panel_pids)"; exit 1; } ;;
+  status)
+    echo "daemon: $(daemon_pids | tr '\n' ' ')  panel: $(panel_pids | tr '\n' ' ')  socket: $([ -S "$ORING_SOCKET" ] && echo yes || echo no)"
+    tail -5 "$dev/daemon.log" 2>/dev/null || true ;;
+  toggle) exec "$oring" toggle ;;
+  oring) shift; exec "$oring" "$@" ;;
+  shot)
+    out=${2:-$dev/panel.png}
+    # the panel is anchored right, below the bar; geometry in logical pixels
+    read -r w h < <(hyprctl -j monitors | "$ORING_PYTHON" -c 'import json,sys; m=json.load(sys.stdin)[0]; print(int(m["width"]/m["scale"]), int(m["height"]/m["scale"]))')
+    width=${ORING_WIDTH:-520}
+    # grim waits forever for a frame when the monitor is off (DPMS) or the session is locked
+    timeout 10 grim -g "$((w - width - 24)),0 $((width + 24))x$h" "$out" && echo "$out" ||
+      { echo "screenshot failed: monitor off or session locked? (hyprctl monitors: dpmsStatus)"; exit 1; } ;;
+  env) printf 'export ORING_SOCKET=%q XDG_STATE_HOME=%q ORING_CONFIG=%q ORING_PYTHON=%q ORING_QUICKSHELL=%q\n' \
+         "$ORING_SOCKET" "$XDG_STATE_HOME" "$ORING_CONFIG" "$ORING_PYTHON" "$ORING_QUICKSHELL" ;;
+  *) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

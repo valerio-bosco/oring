@@ -5,7 +5,8 @@
 #   oring ui              run the panel (normally a systemd user service)
 #   oring toggle | open | close
 #   oring ask <text>      open the panel and send a message
-#   oring send <text>     send a message from the terminal and print the answer
+#   oring send [--auto allow|deny] <text>   send from the terminal and print the answer
+#   oring state | select <agent> | new | cancel
 #   oring mcp             run the desktop MCP server (for other MCP clients, e.g. `claude mcp add`)
 set -euo pipefail
 
@@ -17,8 +18,8 @@ export ORING_DESKTOP_MCP=${ORING_DESKTOP_MCP:-$(readlink -f "$0") mcp}
 ui=(-p "$share/ui/shell.qml")
 
 case "${1:-}" in
-  daemon) shift; PYTHONPATH="$share${PYTHONPATH:+:$PYTHONPATH}" exec "$python" -m oring daemon "$@" ;;
-  send)   shift; PYTHONPATH="$share${PYTHONPATH:+:$PYTHONPATH}" exec "$python" -m oring send "$@" ;;
+  daemon|send|state|select|new|cancel)
+          PYTHONPATH="$share${PYTHONPATH:+:$PYTHONPATH}" exec "$python" -m oring "$@" ;;
   ui)     exec "$quickshell" "${ui[@]}" ;;
   toggle|open|close) exec "$quickshell" "${ui[@]}" ipc call oring "$1" ;;
   ask)    shift; exec "$quickshell" "${ui[@]}" ipc call oring ask "$*" ;;
@@ -37,5 +38,5 @@ case "${1:-}" in
       fi
     fi
     exec "$python" "$share/mcp/desktop_mcp.py" ;;
-  *) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
