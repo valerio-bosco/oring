@@ -64,6 +64,7 @@ def test_permission_buttons(telegram, button, outcome):
     api.user_says(ME, "permission please")
     mid = api.wait_for(lambda t: t.find(ME, "Run rm -rf /tmp/x"))
     data = next(d for label, d in api.messages[mid]["buttons"] if label.startswith(button))
+    assert "<pre><code>Run rm -rf /tmp/x</code></pre>" in api.messages[mid]["markup"]   # no links/commands
     api.user_presses(ME, mid, data)
     api.wait_for(lambda t: t.find(ME, outcome))
     api.wait_for(lambda t: "→" in t.messages[mid]["text"] and not t.messages[mid]["buttons"])

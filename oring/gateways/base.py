@@ -324,7 +324,7 @@ class Gateway:
         chats = [self.turn.chat] if self.turn else sorted(self.allowed)
         buttons = [[(("✅ " if o.get("kind", "").startswith("allow") else "❌ ") + o["name"], f"p:{ev['id']}:{i}")]
                    for i, o in enumerate(ev["options"])]
-        text = f"{self.tr('permission')}\n{ev['title']}"
+        text = self._permission_text(ev["title"])
         if self.turn and self.progress:
             # show what led to the request, then continue the answer in a new message below it:
             # edited messages do not move, so the rest of the answer would stay hidden above
@@ -337,13 +337,19 @@ class Gateway:
         for chat in chats:
             p["messages"].append((chat, await self.send(chat, text, buttons)))
 
+    def _permission_text(self, title: str, outcome: str | None = None) -> str:
+        # the action as a code block: chat apps would turn paths like /async into links or commands
+        action = title.replace("```", "'''")
+        text = f"{self.tr('permission')}\n```\n{action}\n```"
+        return text + (f"\n→ {outcome}" if outcome else "")
+
     async def _close_permission(self, pid: str):
         p = self.permissions.pop(pid, None)
         if not p:
             return
         outcome = f"{self.tr('answered')}: {p['answer']}" if p.get("answer") else self.tr("answered_elsewhere")
         for chat, ref in p["messages"]:
-            await self.edit(chat, ref, f"{self.tr('permission')}\n{p['title']}\n→ {outcome}")
+            await self.edit(chat, ref, self._permission_text(p["title"], outcome))
 
     # ── Live message rendering ──────────────────────────────────────────────
 
