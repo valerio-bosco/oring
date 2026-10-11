@@ -14,6 +14,7 @@ def test_config_defaults(tmp_path, monkeypatch):
     assert [a["id"] for a in cfg["agents"]] == ["claude"]
     assert cfg["default_agent"] == "claude"
     assert "clicca" in cfg["confirm_tools"]
+    assert "avvia_applicazione" in cfg["confirm_tools"]     # runs arbitrary commands
 
 
 @pytest.mark.parametrize("body, error", [

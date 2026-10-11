@@ -23,8 +23,9 @@ BACKEND_TYPES = {"claude-cli", "acp", "openai"}
 
 # Desktop tools that need the user's confirmation in the panel, whatever the agent
 # (overridable globally or per agent with confirm_tools)
-DEFAULT_CONFIRM_TOOLS = ["clicca", "scorri", "muovi_mouse", "scrivi_testo", "premi_tasti",
-                         "chiudi_finestra", "scrivi_appunti"]
+# avvia_applicazione runs any shell command: without confirmation it would bypass every permission
+DEFAULT_CONFIRM_TOOLS = ["avvia_applicazione", "clicca", "scorri", "muovi_mouse", "scrivi_testo",
+                         "premi_tasti", "chiudi_finestra", "scrivi_appunti"]
 
 
 def config_path() -> Path:

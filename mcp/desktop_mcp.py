@@ -214,6 +214,7 @@ def flottante(finestra: str) -> str:
 
 
 @mcp.tool()
+@_con_conferma
 def avvia_applicazione(comando: str, workspace: int | None = None) -> str:
     """Avvia un'applicazione (es. "firefox", "kitty", "nautilus", "code", "spotify").
     Se `workspace` è indicato, prima passa a quel workspace così l'app si apre lì."""

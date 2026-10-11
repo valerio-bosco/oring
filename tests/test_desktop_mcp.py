@@ -107,6 +107,14 @@ def test_screen_capture_when_unlocked(fake_desktop):
                                     "grim -g 0,0 3440x1440 -s 0.4 " + fake_desktop.calls()[1].split()[-1]]
 
 
+def test_launching_apps_goes_through_the_gate(fake_desktop, monkeypatch, tmp_path):
+    # avvia_applicazione runs any command: with oring's socket set and no daemon answering, it is denied
+    monkeypatch.setenv("ORING_SOCKET", str(tmp_path / "nobody.sock"))
+    with pytest.raises(PermissionError):
+        desktop_mcp.avvia_applicazione(comando="rm -rf ~")
+    assert fake_desktop.calls() == []
+
+
 def test_tools_keep_their_signatures():
     # the decorators must not hide the parameters from FastMCP (the agents see them)
     tools = {t.name: t for t in desktop_mcp.mcp._tool_manager.list_tools()}

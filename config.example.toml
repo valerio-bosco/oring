@@ -16,8 +16,8 @@ desktop_mcp = true
 
 # Desktop tools that always need confirmation in the panel, whatever the agent.
 # Per-agent override: confirm_tools = [] inside [[agents]].
-confirm_tools = ["clicca", "scorri", "muovi_mouse", "scrivi_testo", "premi_tasti",
-                 "chiudi_finestra", "scrivi_appunti"]
+confirm_tools = ["avvia_applicazione", "clicca", "scorri", "muovi_mouse", "scrivi_testo",
+                 "premi_tasti", "chiudi_finestra", "scrivi_appunti"]
 
 # More MCP servers, given to every agent
 # [[mcp_servers]]

@@ -70,6 +70,11 @@ correct entries that turn out wrong instead of adding contradictions.
 - **G14 — Gateway races**: a button press can arrive before `send()` returns (register the
   permission before sending); `/status` right after `/new` can read stale state while the daemon is
   still closing a turn (`op_and_wait_state` waits for the new state). Both found by the tests.
+- **G15 — `avvia_applicazione` is a shell**: it runs any command through Hyprland's exec, so
+  without confirmation every agent could bypass all permissions (Claude allows `mcp__desktop`
+  wholesale). Found in the 2026-10-11 security review; now in confirm_tools.
+- **G16 — Agents' own permission defaults differ**: OpenCode allows bash/edit/webfetch without
+  asking unless `permission` is configured; via ACP oring only sees what the agent asks.
 - **G11 — Screen coordinates**: grim and Hyprland use logical pixels (monitor size / scale);
   the maintainer's 3440×1440 at scale 1.0667 is 3225×1350 logical.
 
@@ -103,3 +108,5 @@ correct entries that turn out wrong instead of adding contradictions.
 - 2026-10-11 — Step 3.1: messaging gateways (base + Telegram), 8 tests with a fake Bot API;
   deployed (@oring_bot, one allowed chat, token in ~/.config/oring/telegram-token), confirmed
   working by the maintainer.
+- 2026-10-11 — Security review against OpenClaw's incidents: fixed `avvia_applicazione` bypass (G15);
+  open items S2–S6 in PLAN Phase 1b.

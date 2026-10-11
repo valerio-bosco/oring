@@ -64,8 +64,9 @@ nix build                  # the package
 
 - **Never test on the installed instance** (systemd user services `oring`, `oring-ui`): use the
   test suite or `scripts/dev`, which has its own socket, state and config.
-- **Risky desktop tools are real.** `clicca`, `scrivi_testo`, `premi_tasti`, `muovi_mouse`,
-  `scorri`, `chiudi_finestra`, `scrivi_appunti` act on the user's session. In live tests answer
+- **Risky desktop tools are real.** `avvia_applicazione` (runs any command), `clicca`,
+  `scrivi_testo`, `premi_tasti`, `muovi_mouse`, `scorri`, `chiudi_finestra`, `scrivi_appunti` act on
+  the user's session. In live tests answer
   their confirmations with **deny** unless the test is specifically about them, and then use only
   the clipboard. An agent once typed into a terminal during a test (see MEMORY G6).
 - **Do not weaken the confirmation gate** (`_con_conferma`, `Daemon.gate`) or the permission relay;

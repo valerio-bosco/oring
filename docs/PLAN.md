@@ -36,6 +36,22 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[-]` dropped (s
 - [ ] **1.5 Claude streaming**: use `--include-partial-messages` so Claude's text streams like the
   other backends. Done when: panel shows text growing; tests updated with a fake partial stream.
 
+## Phase 1b — Security hardening (review of 2026-10-11, compared with OpenClaw's incidents)
+
+- [x] **S1 Confirm `avvia_applicazione`** (it runs arbitrary commands) → 2026-10-11, test added.
+- [ ] **S2 Agents ask before acting**: OpenCode `permission: {"*": "ask"}` (read allowed), Goose
+  approve mode, Codex approval policy "on-request"; so ACP permission requests reach the panel and
+  Telegram. Done when: each agent asks for a shell command in a live test.
+- [ ] **S3 Gateway roles**: per-chat role (`owner` / `user` without permission approval and
+  without agent switching / `read-only`), so another person can be added safely.
+- [ ] **S4 Secrets out of reach**: Claude's pre-allowed `Read` can read `~/.ssh`, the bot token…;
+  restrict with Claude Code deny rules (`Read(~/.ssh/**)`, `Read(~/.config/oring/**)`, …) passed by
+  the backend. Done when: a test shows the args, live check that reading the token is refused.
+- [ ] **S5 Prompt-injection hygiene**: mark tool results from the web/clipboard/OCR as untrusted in
+  the system prompt; never auto-approve; document the residual risk in README.
+- [ ] **S6 Headless availability**: daemon + gateways reachable after a reboot before login
+  (linger, or a session-independent target; desktop tools then report "no graphical session").
+
 ## Phase 2 — Gemini through Antigravity
 
 - [ ] **2.1 Study `agy --print --output-format stream-json`**: event format, sessions
