@@ -77,6 +77,13 @@ correct entries that turn out wrong instead of adding contradictions.
   asking unless `permission` is configured; via ACP oring only sees what the agent asks.
 - **G11 — Screen coordinates**: grim and Hyprland use logical pixels (monitor size / scale);
   the maintainer's 3440×1440 at scale 1.0667 is 3225×1350 logical.
+- **G17 — Telegram shows raw Markdown** unless `parse_mode` is set, and MarkdownV2 rejects any
+  unescaped `.`/`-`/`(`. The adapter converts Markdown to Telegram HTML (`to_html`), which must
+  also handle partial texts (live edits, split messages); if Telegram still answers "can't parse
+  entities" the message goes out as plain text. The fake Bot API validates and renders the HTML.
+- **G18 — `scripts/check` without pytest**: the maintainer's shell exports `ORING_PYTHON` pointing
+  to a Python without pytest; run `ORING_PYTHON=$(nix build --no-link --print-out-paths
+  .#dev-python)/bin/python scripts/check`.
 
 ## Maintainer environment
 
@@ -110,3 +117,5 @@ correct entries that turn out wrong instead of adding contradictions.
   working by the maintainer.
 - 2026-10-11 — Security review against OpenClaw's incidents: fixed `avvia_applicazione` bypass (G15);
   open items S2–S6 in PLAN Phase 1b.
+- 2026-10-11 — Telegram messages rendered as formatted text (Markdown → HTML, plain-text fallback,
+  G17); 87 tests pass. Not deployed yet.

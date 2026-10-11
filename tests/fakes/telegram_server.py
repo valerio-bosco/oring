@@ -1,13 +1,45 @@
 """A fake Telegram Bot API for the tests (stdlib only): a queue of updates for getUpdates, and a
-record of the bot's messages (text, buttons, edit history) and calls."""
+record of the bot's messages (text as the user sees it, raw markup, buttons, edit history) and calls.
+parse_mode HTML is checked like Telegram does (known tags, balanced) and rendered to plain text;
+set reject_html to make it refuse any markup."""
 
 import itertools
 import json
 import threading
 import time
+from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 TOKEN = "123:TEST"
+TAGS = {"b", "strong", "i", "em", "u", "ins", "s", "strike", "del", "a", "code", "pre", "blockquote",
+        "tg-spoiler", "span"}
+
+
+class _Render(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.text, self.open = [], []
+
+    def handle_starttag(self, tag, attrs):
+        if tag not in TAGS:
+            raise ValueError(f'Bad Request: can\'t parse entities: unsupported start tag "{tag}"')
+        self.open.append(tag)
+
+    def handle_endtag(self, tag):
+        if not self.open or self.open.pop() != tag:
+            raise ValueError(f'Bad Request: can\'t parse entities: unexpected end tag "{tag}"')
+
+    def handle_data(self, data):
+        self.text.append(data)
+
+
+def render_html(markup: str) -> str:
+    r = _Render()
+    r.feed(markup)
+    r.close()
+    if r.open:
+        raise ValueError(f'Bad Request: can\'t parse entities: can\'t find end tag "{r.open[-1]}"')
+    return "".join(r.text)
 
 
 class FakeTelegram:
@@ -16,6 +48,7 @@ class FakeTelegram:
         self.updates = []
         self.messages = {}          # message_id → {chat, text, buttons, history}
         self.calls = []             # (method, params)
+        self.reject_html = False
         self.ids = itertools.count(1)
         self.update_ids = itertools.count(1)
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
@@ -72,11 +105,15 @@ class FakeTelegram:
                     if ready or time.monotonic() > deadline:
                         return ready
                     self.lock.wait(0.1)
+        if method in ("sendMessage", "editMessageText") and p.get("parse_mode") == "HTML":
+            if self.reject_html:
+                raise ValueError("Bad Request: can't parse entities: rejected by the test")
+            p = {**p, "markup": p["text"], "text": render_html(p["text"])}
         if method == "sendMessage":
             mid = next(self.ids)
             with self.lock:
                 self.messages[mid] = {"chat": int(p["chat_id"]), "text": p["text"], "history": [p["text"]],
-                                      "buttons": self._buttons(p)}
+                                      "markup": p.get("markup"), "buttons": self._buttons(p)}
                 self.lock.notify_all()
             return {"message_id": mid}
         if method == "editMessageText":
@@ -84,7 +121,7 @@ class FakeTelegram:
                 m = self.messages[int(p["message_id"])]
                 if m["text"] == p["text"] and m["buttons"] == self._buttons(p):
                     raise ValueError("Bad Request: message is not modified")
-                m["text"], m["buttons"] = p["text"], self._buttons(p)
+                m["text"], m["markup"], m["buttons"] = p["text"], p.get("markup"), self._buttons(p)
                 m["history"].append(p["text"])
                 self.lock.notify_all()
             return True

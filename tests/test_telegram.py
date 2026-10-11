@@ -3,7 +3,8 @@
 import pytest
 
 from conftest import fake_acp_agent
-from telegram_server import TOKEN, FakeTelegram
+from oring.gateways.telegram import to_html
+from telegram_server import TOKEN, FakeTelegram, render_html
 
 ME, STRANGER = 1001, 666
 
@@ -112,3 +113,39 @@ def test_stop_and_busy(telegram):
     api.wait_for(lambda t: t.find(ME, "Still working"))
     api.user_says(ME, "/stop")
     api.wait_for(lambda t: t.find(ME, "Cancelled"))
+
+
+def test_markdown_is_sent_as_html(telegram):
+    api, start = telegram
+    start()
+    api.user_says(ME, "**bold** and `a<b`")
+    mid = api.wait_for(lambda t: t.find(ME, "echo 1: bold and a<b"))
+    api.wait_for(lambda t: "<b>bold</b> and <code>a&lt;b</code>" in t.messages[mid]["markup"])
+
+
+def test_rejected_markup_falls_back_to_plain_text(telegram):
+    api, start = telegram
+    api.reject_html = True
+    start()
+    api.user_says(ME, "**bold**")
+    mid = api.wait_for(lambda t: t.find(ME, "echo 1: **bold**"))
+    assert api.messages[mid]["markup"] is None
+
+
+@pytest.mark.parametrize("md, html", [
+    ("plain text.", "plain text."),
+    ("a < b & c > d", "a &lt; b &amp; c &gt; d"),
+    ("**bold**, *italic*, _it_, __b__, ~~gone~~", "<b>bold</b>, <i>italic</i>, <i>it</i>, <b>b</b>, <s>gone</s>"),
+    ("snake_case_name and 2*3*4", "snake_case_name and 2*3*4"),
+    ("`**not bold** <x>`", "<code>**not bold** &lt;x&gt;</code>"),
+    ("[docs](https://x.org/a?b=1&c=2)", '<a href="https://x.org/a?b=1&amp;c=2">docs</a>'),
+    ("## Title\n- one\n  * two", "<b>Title</b>\n• one\n  • two"),
+    ("> quoted\n> **line**\nafter", "<blockquote>quoted\n<b>line</b></blockquote>\nafter"),
+    ("| a | b |\n|---|---|\n| <1 | 2 |", "<pre>| a | b |\n|---|---|\n| &lt;1 | 2 |</pre>"),
+    ("x\n```python\nif a < b:\n    pass\n```\ny", 'x\n<pre><code class="language-python">if a &lt; b:\n    pass</code></pre>\ny'),
+    ("partial **bold and\n```sh\nls -l …", 'partial **bold and\n<pre><code class="language-sh">ls -l …</code></pre>'),
+    ("---", "──────────"),
+])
+def test_to_html(md, html):
+    assert to_html(md) == html
+    render_html(html)                                                    # valid for Telegram
