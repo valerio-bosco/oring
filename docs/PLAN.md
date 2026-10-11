@@ -46,12 +46,12 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[-]` dropped (s
 
 ## Phase 3 — Remote use
 
-- [~] **3.1 Telegram gateway** as a daemon client (`oring/gateways/telegram.py` or a separate
+- [x] **3.1 Telegram gateway** as a daemon client (`oring/gateways/telegram.py` or a separate
   service): allowlisted chat id, permission requests as inline buttons, `/new`, `/agent`, `/stop`.
   Done when: tested with a test bot; unauthorized chats ignored (test).
   → 2026-10-11: implemented with a platform-independent base (gateways/base.py) + Telegram adapter,
-  `oring gateways` + HM service; 8 end-to-end tests against a fake Bot API. Missing: real bot test
-  with the maintainer's account.
+  `oring gateways` + HM service; 8 end-to-end tests against a fake Bot API. Deployed as @oring_bot
+  on the maintainer's machine, confirmed working by the maintainer from the phone.
 - [x] **3.2 Suspend policy** decided with the maintainer (no auto-suspend vs Wake-on-LAN) and
   documented; implemented in the maintainer's NixOS config, not in oring.
   → 2026-10-11: no automatic suspend (`idle.actions.suspend.enabled = false` in /etc/nixos,

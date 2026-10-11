@@ -86,6 +86,8 @@ correct entries that turn out wrong instead of adding contradictions.
 - Agents installed for the service: claude (subscription), codex + codex-acp, opencode, goose-cli;
   Ollama service with `qwen3:4b`. OpenCode works without login (free model "big-pickle").
 - Claude Code in the terminal has the desktop MCP registered as `desktop` (`oring mcp`).
+- Telegram gateway: bot @oring_bot, token in `~/.config/oring/telegram-token` (600), allowed chat
+  in /etc/nixos/oring.nix; service `oring-gateways`. No automatic suspend (PC always reachable).
 
 ## Session log
 
@@ -99,4 +101,5 @@ correct entries that turn out wrong instead of adding contradictions.
   (maintainer unlocked), live capture/OCR of a window on workspace 9, 49 tests green.
 - 2026-10-11 — Conventional Commits adopted (hook + 15 tests).
 - 2026-10-11 — Step 3.1: messaging gateways (base + Telegram), 8 tests with a fake Bot API;
-  real-bot test pending (needs the maintainer's bot token and chat id).
+  deployed (@oring_bot, one allowed chat, token in ~/.config/oring/telegram-token), confirmed
+  working by the maintainer.
