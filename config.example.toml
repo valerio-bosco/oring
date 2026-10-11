@@ -1,0 +1,81 @@
+# oring configuration: ~/.config/oring/config.toml
+# With the home-manager module, write the same structure in programs.oring.settings instead.
+
+# Panel language ("it" or "en"); defaults to $LANG
+language = "en"
+
+# Agent selected at startup (defaults to the first one)
+default_agent = "claude"
+
+# Instructions given to every agent (each agent can override them with its own system_prompt)
+# system_prompt = """..."""
+
+# Give the agents the built-in desktop MCP server (windows, workspaces, screenshots, OCR,
+# mouse, keyboard, clipboard, wallpapers, music)
+desktop_mcp = true
+
+# Desktop tools that always need confirmation in the panel, whatever the agent.
+# Per-agent override: confirm_tools = [] inside [[agents]].
+confirm_tools = ["clicca", "scorri", "muovi_mouse", "scrivi_testo", "premi_tasti",
+                 "chiudi_finestra", "scrivi_appunti"]
+
+# More MCP servers, given to every agent
+# [[mcp_servers]]
+# name = "github"
+# command = "github-mcp-server"
+# args = ["stdio"]
+# env = { GITHUB_TOKEN = "..." }
+
+
+# ── Agents ───────────────────────────────────────────────────────────────────
+# Common options: id, name, type, command, env = { ... }, cwd = "~", system_prompt, confirm_tools
+
+# Claude Code through its CLI: works with a Claude subscription (Pro/Max)
+[[agents]]
+id = "claude"
+name = "Claude"
+type = "claude-cli"
+# command = "claude"
+# allowed_tools = ["mcp__desktop", "Read"]   # used without asking; anything else is asked in the panel
+# permissions = "ask"                        # "deny": refuse tools that are not allowed
+# args = ["--model", "sonnet"]
+
+# Agents speaking ACP (Agent Client Protocol). Sign in to each one once from a terminal.
+# permissions: "ask" (the panel shows the agent's own permission requests) | "allow" | "deny"
+# Gemini CLI works with a Gemini API key or Vertex AI; Google replaced it with Antigravity CLI
+# (no ACP yet) for free and Google AI Pro/Ultra accounts
+[[agents]]
+id = "gemini"
+name = "Gemini"
+type = "acp"
+command = "gemini --acp"
+
+[[agents]]
+id = "codex"
+name = "Codex"
+type = "acp"
+command = "codex-acp"
+
+[[agents]]
+id = "opencode"
+name = "OpenCode"
+type = "acp"
+command = "opencode acp"
+
+[[agents]]
+id = "goose"
+name = "Goose"
+type = "acp"
+command = "goose acp"
+
+# OpenAI-compatible APIs: Ollama, llama.cpp, LM Studio, OpenRouter, ...
+# oring runs the tool loop, so the model needs function calling support.
+[[agents]]
+id = "local"
+name = "Qwen (local)"
+type = "openai"
+model = "qwen3:4b"
+base_url = "http://localhost:11434/v1"
+# api_key_env = "OPENROUTER_API_KEY"
+# permissions = "allow"        # "ask" to confirm every tool call
+# max_steps = 12
