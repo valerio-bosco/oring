@@ -191,3 +191,17 @@ def test_failed_download_is_reported(telegram):
     api.wait_for(lambda t: t.find(ME, "Could not download"))
     api.user_says(ME, "ping")
     api.wait_for(lambda t: t.find(ME, "echo 1: ping"))                   # the chat is not stuck
+
+
+def test_answer_continues_below_a_permission_request(telegram):
+    api, start = telegram
+    start()
+    api.user_says(ME, "permission please")
+    asked = api.wait_for(lambda t: t.find(ME, "Run rm -rf /tmp/x"))
+    before = api.find(ME, "⚙ ")
+    assert before < asked and not api.messages[before]["text"].endswith("…")   # closed, no ellipsis
+    data = next(d for label, d in api.messages[asked]["buttons"] if label.startswith("✅"))
+    api.user_presses(ME, asked, data)
+    answer = api.wait_for(lambda t: t.find(ME, "allowed"))
+    assert answer > asked                                                # visible at the bottom
+    assert "allowed" not in api.messages[before]["text"]

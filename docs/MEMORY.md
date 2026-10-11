@@ -89,6 +89,9 @@ correct entries that turn out wrong instead of adding contradictions.
 - **G18 — `scripts/check` without pytest**: the maintainer's shell exports `ORING_PYTHON` pointing
   to a Python without pytest; run `ORING_PYTHON=$(nix build --no-link --print-out-paths
   .#dev-python)/bin/python scripts/check`.
+- **G19 — Edited chat messages do not move**: a live answer started before a permission request
+  stayed above it, so the final text looked missing. The live message is closed at each request
+  and the answer continues in a new message below (`_ask_permission`).
 
 ## Maintainer environment
 
@@ -126,3 +129,5 @@ correct entries that turn out wrong instead of adding contradictions.
   G17); 87 tests pass. Not deployed yet.
 - 2026-10-11 — Images from Telegram reach the agents (D11): photos and image files, caption as
   text; 94 tests pass. Not deployed yet.
+- 2026-10-11 — Answers hidden above permission requests on Telegram (G19): the live message now
+  closes at a request and the answer continues below it; 95 tests pass. Not deployed yet.

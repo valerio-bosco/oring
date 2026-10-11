@@ -302,7 +302,12 @@ class Gateway:
                    for i, o in enumerate(ev["options"])]
         text = f"{self.tr('permission')}\n{ev['title']}"
         if self.turn:
-            await self._render(self.turn)              # show what led to the request first
+            # show what led to the request, then continue the answer in a new message below it:
+            # edited messages do not move, so the rest of the answer would stay hidden above
+            await self._render(self.turn, final=True)
+            if self.turn.ref is not None:
+                role = self.turn.parts[-1][0] if self.turn.parts else "agent"
+                self.turn.parts, self.turn.ref, self.turn.sent_text = [[role, ""]], None, ""
         # registered before sending: a quick press can arrive before send() returns
         p = self.permissions[ev["id"]] = {"options": ev["options"], "messages": [], "title": ev["title"]}
         for chat in chats:

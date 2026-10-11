@@ -1,6 +1,7 @@
 """A scripted ACP agent for the tests. Behaviour depends on the prompt text:
 
-  contains "permission"  → asks session/request_permission, then says "allowed" or "denied"
+  contains "permission"  → a tool_call, then asks session/request_permission, then says "allowed"
+                           or "denied"
   contains "slow"        → keeps working until session/cancel, then stops with "cancelled"
   contains "crash"       → exits immediately
   anything else          → a tool_call titled "desktop_elenca_finestre", then "echo <n>: <text>"
@@ -67,6 +68,8 @@ def prompt(rid, params):
         send({"id": rid, "result": {"stopReason": "cancelled"}})
         return
     if "permission" in text:
+        update(session, {"sessionUpdate": "tool_call", "toolCallId": "t0", "title": "desktop_elenca_finestre",
+                         "kind": "other", "status": "pending", "rawInput": {}})
         res = ask("session/request_permission", {
             "sessionId": session,
             "toolCall": {"toolCallId": "t1", "title": "Run rm -rf /tmp/x", "kind": "execute"},
