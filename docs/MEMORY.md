@@ -151,3 +151,7 @@ correct entries that turn out wrong instead of adding contradictions.
   blocks in chats; 100 tests pass. Not deployed yet.
 - 2026-10-11 — Access rules engine (D12, S7 part 1): sandboxed Claude, live-checked with decoys in
   /tmp; 109 tests pass. Panel screen next. Not deployed yet (after deploy: /new, the cwd changes).
+- 2026-10-11 — S7 done: "Accessi" screen in the panel (per-mode lists, workdir, outside sandbox,
+  network; IPC `access`), screenshot-checked on the dev instance; scripts/check full green. Not
+  deployed yet. Gotcha: a panel started from an agent's Bash dies when the command returns; run it
+  as a background task for visual checks.

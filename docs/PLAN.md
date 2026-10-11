@@ -49,11 +49,12 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[-]` dropped (s
   the backend. Done when: a test shows the args, live check that reading the token is refused.
   → 2026-10-11: PROTECTED_PATHS as Read+Edit deny rules (`--disallowedTools`), configurable; live
   check on a decoy in ~/.config/oring: refused through Read and through `cat` in Bash, auto mode on.
-- [ ] **S7 Access rules**: per-mode forbidden/writable paths, workdir, commands outside the sandbox
+- [x] **S7 Access rules**: per-mode forbidden/writable paths, workdir, commands outside the sandbox
   and network domains in `permissions.json`, editable only from the panel; enforced through Claude
   Code's sandbox with no way out. Done when: engine + panel screen + live checks.
   → 2026-10-11: engine (permissions.py, daemon ops access_rules/set_access_rules, claude-cli
-  --settings, bubblewrap+socat in the package), live-checked; panel screen pending.
+  --settings, bubblewrap+socat in the package), live-checked; panel screen "Accessi" (header
+  button, IPC `access`), checked by screenshot on the dev instance.
 - [ ] **S5 Prompt-injection hygiene**: mark tool results from the web/clipboard/OCR as untrusted in
   the system prompt; never auto-approve; document the residual risk in README.
 - [ ] **S6 Headless availability**: daemon + gateways reachable after a reboot before login
