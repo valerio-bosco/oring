@@ -119,3 +119,21 @@ def test_auto_mode(daemon, tmp_path):
     assert first[first.index("--permission-mode") + 1] == "acceptEdits"
     assert second[second.index("--permission-mode") + 1] == "auto"
     assert "--permission-prompt-tool" in second                          # risky actions are still asked
+
+
+def test_protected_paths(daemon, tmp_path):
+    d, log = setup(daemon, tmp_path, extra_protected_paths=["~/secret/**"])
+    with d.client() as c:
+        c.turn("hi")
+    args = calls(log)[0]
+    denied = args[args.index("--disallowedTools") + 1:]
+    for rule in ("Read(~/.ssh/**)", "Edit(~/.ssh/**)", "Read(~/.config/oring/**)", "Read(~/secret/**)"):
+        assert rule in denied
+    assert "Read" in args[args.index("--allowedTools") + 1:]             # reading stays allowed elsewhere
+
+
+def test_protected_paths_can_be_disabled(daemon, tmp_path):
+    d, log = setup(daemon, tmp_path, protected_paths=[])
+    with d.client() as c:
+        c.turn("hi")
+    assert "--disallowedTools" not in calls(log)[0]

@@ -7,7 +7,8 @@ Options:  command (default "claude"), allowed_tools (default: the MCP servers + 
           args (extra CLI arguments, e.g. ["--model", "sonnet"]), strict_mcp (default true:
           only the MCP servers given by oring, not the user's own Claude Code ones),
           permissions: "ask" (default: other tools are asked in the panel) | "deny" (refused),
-          permission_mode: Claude Code's --permission-mode when auto mode (daemon op "auto") is off.
+          permission_mode: Claude Code's --permission-mode when auto mode (daemon op "auto") is off,
+          protected_paths (default PROTECTED_PATHS) / extra_protected_paths: never read or edited.
 """
 
 import asyncio
@@ -17,6 +18,17 @@ import os
 from . import Backend, StderrTail, which, with_paths
 from .. import config
 from ..labels import describe
+
+# Never read or changed, even with Read pre-allowed or in auto mode: keys, credentials, browser
+# profiles, the agents' own logins, oring's config and bot token. Claude Code applies Read rules to
+# the files Bash commands read too, but this is not a sandbox (MEMORY G20).
+PROTECTED_PATHS = [
+    "~/.ssh/**", "~/.gnupg/**", "~/.password-store/**", "~/.local/share/keyrings/**",
+    "~/.config/oring/**", "~/.netrc", "~/.git-credentials", "~/.config/gh/**", "~/.aws/**",
+    "~/.kube/**", "~/.docker/config.json", "~/.mozilla/**", "~/.config/google-chrome/**",
+    "~/.config/chromium/**", "~/.claude/.credentials.json", "~/.codex/auth.json",
+    "~/.local/share/opencode/auth.json",
+]
 
 
 class ClaudeCliBackend(Backend):
@@ -51,6 +63,9 @@ class ClaudeCliBackend(Backend):
             args.append("--strict-mcp-config")
         if allowed:
             args += ["--allowedTools", *allowed]
+        protected = self.conf.get("protected_paths", PROTECTED_PATHS) + self.conf.get("extra_protected_paths", [])
+        if protected:                               # deny rules win over allowed tools and auto mode
+            args += ["--disallowedTools", *(f"{tool}({p})" for p in protected for tool in ("Read", "Edit"))]
         if ask:
             args += ["--permission-prompt-tool", "mcp__oring__approve"]
         # auto: Claude Code's classifier approves safe actions, the rest still reaches the prompt tool

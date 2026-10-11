@@ -44,9 +44,11 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[-]` dropped (s
   Telegram. Done when: each agent asks for a shell command in a live test.
 - [ ] **S3 Gateway roles**: per-chat role (`owner` / `user` without permission approval and
   without agent switching / `read-only`), so another person can be added safely.
-- [ ] **S4 Secrets out of reach**: Claude's pre-allowed `Read` can read `~/.ssh`, the bot token…;
+- [x] **S4 Secrets out of reach**: Claude's pre-allowed `Read` can read `~/.ssh`, the bot token…;
   restrict with Claude Code deny rules (`Read(~/.ssh/**)`, `Read(~/.config/oring/**)`, …) passed by
   the backend. Done when: a test shows the args, live check that reading the token is refused.
+  → 2026-10-11: PROTECTED_PATHS as Read+Edit deny rules (`--disallowedTools`), configurable; live
+  check on a decoy in ~/.config/oring: refused through Read and through `cat` in Bash, auto mode on.
 - [ ] **S5 Prompt-injection hygiene**: mark tool results from the web/clipboard/OCR as untrusted in
   the system prompt; never auto-approve; document the residual risk in README.
 - [ ] **S6 Headless availability**: daemon + gateways reachable after a reboot before login

@@ -92,6 +92,9 @@ correct entries that turn out wrong instead of adding contradictions.
 - **G19 — Edited chat messages do not move**: a live answer started before a permission request
   stayed above it, so the final text looked missing. The live message is closed at each request
   and the answer continues in a new message below (`_ask_permission`).
+- **G20 — Deny rules are not a sandbox**: Claude Code applies `Read(path)` deny rules to Read and
+  also refused `cat` of a protected file in Bash (live check, 2.1.296), but other programs (python,
+  scripts) could still open files: real isolation would need Claude Code's sandbox (bubblewrap).
 
 ## Maintainer environment
 
@@ -134,3 +137,5 @@ correct entries that turn out wrong instead of adding contradictions.
 - 2026-10-11 — Auto mode (`/auto`, daemon op "auto", persisted; claude-cli `--permission-mode auto`,
   live-checked with Claude Code 2.1.296) and quiet gateways (`progress = false`: final answer +
   permission requests + typing indicator); 98 tests pass. Not deployed yet.
+- 2026-10-11 — S4: protected paths denied to Claude (G20); permission requests shown as code
+  blocks in chats; 100 tests pass. Not deployed yet.
