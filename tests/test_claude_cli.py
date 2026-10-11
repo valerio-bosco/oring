@@ -12,6 +12,8 @@ import json, os, sys
 args = sys.argv[1:]
 with open(os.environ["FAKE_CLAUDE_LOG"], "a") as f:
     f.write(json.dumps(args) + "\\n")
+with open(os.environ["FAKE_CLAUDE_LOG"] + ".cwd", "a") as f:
+    f.write(os.getcwd() + "\\n")
 prompt = args[args.index("-p") + 1]
 def out(ev): print(json.dumps(ev), flush=True)
 out({{"type": "system", "subtype": "init", "session_id": "sess-1"}})
@@ -33,6 +35,8 @@ def setup(daemon, tmp_path, **agent):
     log = tmp_path / "claude.log"
     d = daemon([{"id": "claude", "type": "claude-cli", "command": str(exe), **agent}],
                env={"FAKE_CLAUDE_LOG": str(log), "ORING_BIN": "/fake/oring"})
+    # the sandbox workdir inside the test directory, not ~/Projects
+    (d.config.parent / "permissions.json").write_text(json.dumps({"workdir": str(tmp_path / "work")}))
     return d, log
 
 
@@ -121,19 +125,34 @@ def test_auto_mode(daemon, tmp_path):
     assert "--permission-prompt-tool" in second                          # risky actions are still asked
 
 
-def test_protected_paths(daemon, tmp_path):
-    d, log = setup(daemon, tmp_path, extra_protected_paths=["~/secret/**"])
+
+def settings(args):
+    return json.loads(open(args[args.index("--settings") + 1]).read())
+
+
+def test_sandbox_follows_the_access_rules(daemon, tmp_path):
+    d, log = setup(daemon, tmp_path)
+    with d.client() as c:
+        c.turn("one")
+        c.op("auto", value=True)
+        c.turn("two")
+    manual, auto = calls(log)
+    assert open(str(log) + ".cwd").read().split() == [str(tmp_path / "work")] * 2   # workdir
+    for args in (manual, auto):
+        assert "--disallowedTools" not in args
+    sandbox = settings(auto)["sandbox"]
+    assert sandbox["enabled"] and sandbox["failIfUnavailable"] and not sandbox["allowUnsandboxedCommands"]
+    assert sandbox["autoAllowBashIfSandboxed"] is True                   # auto: sandboxed commands run unasked
+    assert sandbox["filesystem"]["allowWrite"] == [f"/{tmp_path / 'work'}", "//tmp"]
+    assert "~/.ssh" in sandbox["filesystem"]["denyRead"]
+    assert f"/{d.config.parent}" in sandbox["filesystem"]["denyRead"]     # the rules themselves
+    assert "Read(~/.ssh/**)" in settings(auto)["permissions"]["deny"]
+
+
+def test_without_sandbox_deny_rules_only(daemon, tmp_path):
+    d, log = setup(daemon, tmp_path, sandbox=False)
     with d.client() as c:
         c.turn("hi")
     args = calls(log)[0]
-    denied = args[args.index("--disallowedTools") + 1:]
-    for rule in ("Read(~/.ssh/**)", "Edit(~/.ssh/**)", "Read(~/.config/oring/**)", "Read(~/secret/**)"):
-        assert rule in denied
-    assert "Read" in args[args.index("--allowedTools") + 1:]             # reading stays allowed elsewhere
-
-
-def test_protected_paths_can_be_disabled(daemon, tmp_path):
-    d, log = setup(daemon, tmp_path, protected_paths=[])
-    with d.client() as c:
-        c.turn("hi")
-    assert "--disallowedTools" not in calls(log)[0]
+    assert "--settings" not in args
+    assert "Read(~/.ssh/**)" in args[args.index("--disallowedTools") + 1:]

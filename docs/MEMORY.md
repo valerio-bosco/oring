@@ -38,6 +38,12 @@ correct entries that turn out wrong instead of adding contradictions.
   pass them natively where possible (ACP agents declaring `promptCapabilities.image`, OpenAI agents
   with `vision = true`), otherwise as paths in the text: Claude Code opens them with Read (allowed
   by default). The panel only shows "📎 name" lines in the user entry; no protocol break.
+- **D12 — Access rules through Claude Code's sandbox.** `permissions.json` in the config dir (always
+  forbidden, so agents cannot touch it; only the panel saves it through the daemon socket, which
+  the sandbox cannot reach). Strict sandbox: allowUnsandboxedCommands false, so forbidden paths
+  cannot even be asked for; outside_sandbox kept to harmless commands (each one is a way out);
+  workdir ~/Projects is Claude's cwd, so the home is read-only to commands. Only Claude: other
+  agents keep their own permission systems for now.
 - **D7 — Ollama with Vulkan** (`pkgs.ollama-vulkan`): the CUDA build is unfree, not in the binary
   cache, would compile for hours; GTX 1060 3 GB → models up to ~4B parameters.
 
@@ -95,6 +101,10 @@ correct entries that turn out wrong instead of adding contradictions.
 - **G20 — Deny rules are not a sandbox**: Claude Code applies `Read(path)` deny rules to Read and
   also refused `cat` of a protected file in Bash (live check, 2.1.296), but other programs (python,
   scripts) could still open files: real isolation would need Claude Code's sandbox (bubblewrap).
+  Now used (D12). Sandbox facts (2.1.296, live): rules from --disallowedTools do NOT reach the
+  sandbox, permissions.deny in --settings does; the working directory is always writable; Linux
+  blocks creating any Unix socket inside it (nix, systemctl, hyprctl fail); excludedCommands use
+  Bash rule syntax ("systemctl --user status *") and still go through the permission checks.
 
 ## Maintainer environment
 
@@ -139,3 +149,5 @@ correct entries that turn out wrong instead of adding contradictions.
   permission requests + typing indicator); 98 tests pass. Not deployed yet.
 - 2026-10-11 — S4: protected paths denied to Claude (G20); permission requests shown as code
   blocks in chats; 100 tests pass. Not deployed yet.
+- 2026-10-11 — Access rules engine (D12, S7 part 1): sandboxed Claude, live-checked with decoys in
+  /tmp; 109 tests pass. Panel screen next. Not deployed yet (after deploy: /new, the cwd changes).

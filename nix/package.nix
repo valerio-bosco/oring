@@ -1,5 +1,6 @@
 { lib, stdenvNoCC, makeWrapper, python3, quickshell, tesseract
 , hyprland, grim, playerctl, libnotify, wtype, wlrctl, wl-clipboard
+, bubblewrap, socat
 }:
 
 let
@@ -7,6 +8,8 @@ let
   ocr = tesseract.override { enableLanguages = [ "eng" "ita" ]; };
   # tools used by the desktop MCP server
   desktopTools = [ hyprland grim playerctl libnotify ocr wtype wlrctl wl-clipboard ];
+  # Claude Code's sandbox (sandbox = true, the default for claude-cli agents)
+  sandboxTools = [ bubblewrap socat ];
 in
 stdenvNoCC.mkDerivation {
   pname = "oring";
@@ -24,7 +27,7 @@ stdenvNoCC.mkDerivation {
       --set ORING_PYTHON ${python}/bin/python3 \
       --set-default ORING_QUICKSHELL ${quickshell}/bin/quickshell \
       --set-default ORING_DESKTOP_MCP "$out/bin/oring mcp" \
-      --suffix PATH : ${lib.makeBinPath desktopTools}
+      --suffix PATH : ${lib.makeBinPath (desktopTools ++ sandboxTools)}
     runHook postInstall
   '';
 

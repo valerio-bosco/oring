@@ -8,6 +8,8 @@ Client → daemon            {"op": ...}
   new                       start a new conversation
   select     agent          switch agent (starts a new conversation)
   auto       value          auto mode on/off: the agent approves safe actions itself (claude-cli)
+  access_rules              → "access_rules" event to this client: data (permissions.py), path
+  set_access_rules data     save them (panel only) → "access_rules", or "access_rules_error" error
   permission id, option     answer a permission request (option = optionId, or null to deny)
 
 Daemon → clients           {"ev": ...}, broadcast to every client
@@ -26,7 +28,7 @@ import os
 import signal
 import uuid
 
-from . import config
+from . import config, permissions
 from .backends import make_backend
 from .labels import describe
 
@@ -244,6 +246,15 @@ class Daemon:
             self.auto = bool(msg.get("value"))
             self._save_state()
             await self.broadcast(self.state())
+        elif op in ("access_rules", "set_access_rules"):
+            # only the panel offers set_access_rules; agents cannot reach this socket from the sandbox
+            try:
+                data = permissions.save(msg.get("data")) if op == "set_access_rules" else permissions.load()
+                reply = {"ev": "access_rules", "data": data, "path": str(permissions.path())}
+            except ValueError as e:
+                reply = {"ev": "access_rules_error", "error": str(e)}
+            writer.write((json.dumps(reply, ensure_ascii=False) + "\n").encode())
+            await writer.drain()
         elif op in ("gate", "approve"):
             allow = await self.gate(msg, always_ask=op == "approve")
             writer.write((json.dumps({"ev": "gate", "allow": allow}) + "\n").encode())
