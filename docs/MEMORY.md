@@ -131,3 +131,6 @@ correct entries that turn out wrong instead of adding contradictions.
   text; 94 tests pass. Not deployed yet.
 - 2026-10-11 — Answers hidden above permission requests on Telegram (G19): the live message now
   closes at a request and the answer continues below it; 95 tests pass. Not deployed yet.
+- 2026-10-11 — Auto mode (`/auto`, daemon op "auto", persisted; claude-cli `--permission-mode auto`,
+  live-checked with Claude Code 2.1.296) and quiet gateways (`progress = false`: final answer +
+  permission requests + typing indicator); 98 tests pass. Not deployed yet.

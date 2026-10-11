@@ -10,7 +10,9 @@ Behaviour:
   message that is edited while the agent works (tool calls as "⚙ …" lines).
 - Turns started elsewhere (the panel) are not mirrored, but their permission requests are sent to
   every allowed chat, so they can be answered remotely. A request answered elsewhere is closed.
-- Commands: /new, /agent (buttons), /stop, /status, /help.
+  With `progress = false` the chat gets only the final answer (what the agent said after its last
+  tool call) and the permission requests; a "typing…" indicator shows that the agent works.
+- Commands: /new, /agent (buttons), /auto (auto mode on/off), /stop, /status, /help.
 - Chats not in `allowed_chats` are ignored and logged. With an empty list the gateway is in setup
   mode: it answers with the chat id to add, and does nothing else.
 """
@@ -29,44 +31,49 @@ log = logging.getLogger("oring.gateway")
 STRINGS = {
     "it": {
         "help": "Scrivimi e passo il messaggio all'agente attivo.\n/new nuova conversazione\n"
-                "/agent scegli l'agente\n/stop interrompi\n/status stato",
+                "/agent scegli l'agente\n/auto modalità auto on/off\n/stop interrompi\n/status stato",
         "busy": "Sto ancora lavorando alla richiesta precedente: aspetta, oppure /stop.",
         "new": "Nuova conversazione con {agent}.", "stopped": "Interrotto.", "nothing": "Niente da interrompere.",
         "pick": "Agente attivo: {agent}. Scegline un altro (inizia una nuova conversazione):",
         "selected": "Agente: {agent}. Nuova conversazione.",
-        "status": "Agente: {agent}\nStato: {state}\nMessaggi nella conversazione: {count}",
+        "status": "Agente: {agent}\nStato: {state}\nModalità auto: {auto}\nMessaggi nella conversazione: {count}",
         "working": "sta lavorando", "idle": "pronto", "permission": "🔐 Richiesta di permesso",
         "answered": "risposto", "answered_elsewhere": "risposto da un altro dispositivo",
         "done": "✓ Fatto.", "offline": "Il daemon di oring non è raggiungibile.",
         "setup": "oring: questa chat non è ancora autorizzata.\nAggiungi questo id ad allowed_chats: {chat}",
         "cancelled": "Interrotto", "busy_err": "Occupato",
+        "auto_on": "Modalità auto attiva: Claude approva da solo le azioni sicure, ti chiedo solo quelle rischiose.",
+        "auto_off": "Modalità auto disattivata: ti chiedo il permesso per ogni azione.",
         "image_failed": "⚠ Non sono riuscito a scaricare l'immagine, riprova.",
     },
     "en": {
         "help": "Write to me and I pass the message to the active agent.\n/new new conversation\n"
-                "/agent pick the agent\n/stop interrupt\n/status status",
+                "/agent pick the agent\n/auto auto mode on/off\n/stop interrupt\n/status status",
         "busy": "Still working on the previous request: wait, or /stop.",
         "new": "New conversation with {agent}.", "stopped": "Stopped.", "nothing": "Nothing to stop.",
         "pick": "Active agent: {agent}. Pick another one (starts a new conversation):",
         "selected": "Agent: {agent}. New conversation.",
-        "status": "Agent: {agent}\nState: {state}\nMessages in the conversation: {count}",
+        "status": "Agent: {agent}\nState: {state}\nAuto mode: {auto}\nMessages in the conversation: {count}",
         "working": "working", "idle": "ready", "permission": "🔐 Permission request",
         "answered": "answered", "answered_elsewhere": "answered on another device",
         "done": "✓ Done.", "offline": "The oring daemon is unreachable.",
         "setup": "oring: this chat is not authorized yet.\nAdd this id to allowed_chats: {chat}",
         "cancelled": "Cancelled", "busy_err": "Busy",
+        "auto_on": "Auto mode on: Claude approves safe actions itself, I only ask for risky ones.",
+        "auto_off": "Auto mode off: I ask permission for every action.",
         "image_failed": "⚠ Could not download the image, please try again.",
     },
 }
 
 COMMANDS = {
-    "it": {"new": "nuova conversazione", "agent": "scegli l'agente", "stop": "interrompi",
-           "status": "stato", "help": "aiuto"},
-    "en": {"new": "new conversation", "agent": "pick the agent", "stop": "interrupt",
-           "status": "status", "help": "help"},
+    "it": {"new": "nuova conversazione", "agent": "scegli l'agente", "auto": "modalità auto on/off",
+           "stop": "interrompi", "status": "stato", "help": "aiuto"},
+    "en": {"new": "new conversation", "agent": "pick the agent", "auto": "auto mode on/off",
+           "stop": "interrupt", "status": "status", "help": "help"},
 }
 MAX_MESSAGE = 3800          # platforms limit message length (Telegram: 4096)
 EDIT_INTERVAL = 1.5         # seconds between edits of a live message (rate limits)
+TYPING_INTERVAL = 4         # without progress: "typing…" is renewed this often (Telegram shows it 5 s)
 INBOX_KEEP = 50             # received images kept on disk (the agents read them from there)
 
 
@@ -106,7 +113,9 @@ class Gateway:
     def __init__(self, conf: dict):
         self.conf = conf
         self.allowed = {str(c) for c in conf.get("allowed_chats", [])}
-        self.state: dict = {"agents": [], "active": "", "busy": False, "language": "en", "history": []}
+        self.state: dict = {"agents": [], "active": "", "busy": False, "auto": False, "language": "en",
+                            "history": []}
+        self.progress = conf.get("progress", True)   # false: only the final answer, no live message
         self.writer: asyncio.StreamWriter | None = None
         self.turn: LiveTurn | None = None
         self.pending_chat: str | None = None     # we sent a message: the next turn is ours
@@ -181,8 +190,16 @@ class Gateway:
     async def _flush_loop(self):
         while True:
             await asyncio.sleep(EDIT_INTERVAL / 3)
-            if self.turn and time.monotonic() - self.turn.last_edit >= EDIT_INTERVAL:
+            if not self.turn:
+                continue
+            if self.progress and time.monotonic() - self.turn.last_edit >= EDIT_INTERVAL:
                 await self._render(self.turn)
+            elif not self.progress and time.monotonic() - self.turn.last_edit >= TYPING_INTERVAL:
+                self.turn.last_edit = time.monotonic()
+                try:
+                    await self.typing(self.turn.chat)
+                except Exception as e:
+                    log.debug("%s: typing indicator: %s", self.name, e)
 
     # ── From the chat app ───────────────────────────────────────────────────
 
@@ -231,9 +248,13 @@ class Gateway:
             buttons = [[(("● " if a["id"] == self.state["active"] else "") + a["name"], f"a:{a['id']}")]
                        for a in self.state["agents"]]
             await self.send(chat, self.tr("pick", agent=self.agent_name()), buttons)
+        elif cmd == "auto":
+            await self.op_and_wait_state("auto", value=not self.state["auto"])
+            await self.send(chat, self.tr("auto_on" if self.state["auto"] else "auto_off"))
         elif cmd == "status":
             await self.send(chat, self.tr("status", agent=self.agent_name(), count=len(self.state["history"]),
-                                          state=self.tr("working" if self.state["busy"] else "idle")))
+                                          state=self.tr("working" if self.state["busy"] else "idle"),
+                                          auto="on" if self.state["auto"] else "off"))
         else:
             await self.send(chat, self.tr("help"))
 
@@ -263,6 +284,7 @@ class Gateway:
         log.debug("%s: event %s", self.name, {k: (v if k != "history" else len(v)) for k, v in ev.items()})
         if kind == "state":
             self.state.update({k: ev[k] for k in ("agents", "active", "busy", "language", "history")})
+            self.state["auto"] = ev.get("auto", False)
             self.state_seen.set()
         elif kind == "busy":
             self.state["busy"] = ev["value"]
@@ -270,6 +292,8 @@ class Gateway:
                 self.turn, self.pending_chat = LiveTurn(self.pending_chat), None
             elif not ev["value"] and self.turn:
                 turn, self.turn = self.turn, None
+                if not self.progress:
+                    turn.parts = self._final(turn.parts)
                 if not turn.parts:
                     turn.parts.append(["info", self.tr("done")])
                 await self._render(turn, final=True)
@@ -301,7 +325,7 @@ class Gateway:
         buttons = [[(("✅ " if o.get("kind", "").startswith("allow") else "❌ ") + o["name"], f"p:{ev['id']}:{i}")]
                    for i, o in enumerate(ev["options"])]
         text = f"{self.tr('permission')}\n{ev['title']}"
-        if self.turn:
+        if self.turn and self.progress:
             # show what led to the request, then continue the answer in a new message below it:
             # edited messages do not move, so the rest of the answer would stay hidden above
             await self._render(self.turn, final=True)
@@ -322,6 +346,12 @@ class Gateway:
             await self.edit(chat, ref, f"{self.tr('permission')}\n{p['title']}\n→ {outcome}")
 
     # ── Live message rendering ──────────────────────────────────────────────
+
+    @staticmethod
+    def _final(parts: list) -> list:
+        """Without progress: what the agent said after its last tool call, and any error."""
+        last_tool = max((i for i, (kind, _) in enumerate(parts) if kind == "tool"), default=-1)
+        return [p for i, p in enumerate(parts) if i > last_tool or p[0] == "error"]
 
     @staticmethod
     def _format(parts: list) -> str:
@@ -375,6 +405,9 @@ class Gateway:
 
     async def answer_button(self, callback, text: str | None = None):
         """Acknowledge a button press (some platforms show a spinner until then)."""
+
+    async def typing(self, chat: str):
+        """Show that the agent is working (used instead of the live message without progress)."""
 
     async def download(self, ref, directory: Path) -> Path:
         """Save an attached image (Incoming.images entry) into directory; returns its path."""

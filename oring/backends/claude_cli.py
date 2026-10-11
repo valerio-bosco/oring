@@ -6,7 +6,8 @@ are allowed in Claude Code itself, not in third-party clients built on the Agent
 Options:  command (default "claude"), allowed_tools (default: the MCP servers + Read),
           args (extra CLI arguments, e.g. ["--model", "sonnet"]), strict_mcp (default true:
           only the MCP servers given by oring, not the user's own Claude Code ones),
-          permissions: "ask" (default: other tools are asked in the panel) | "deny" (refused).
+          permissions: "ask" (default: other tools are asked in the panel) | "deny" (refused),
+          permission_mode: Claude Code's --permission-mode when auto mode (daemon op "auto") is off.
 """
 
 import asyncio
@@ -52,6 +53,10 @@ class ClaudeCliBackend(Backend):
             args += ["--allowedTools", *allowed]
         if ask:
             args += ["--permission-prompt-tool", "mcp__oring__approve"]
+        # auto: Claude Code's classifier approves safe actions, the rest still reaches the prompt tool
+        mode = "auto" if self.daemon.auto else self.conf.get("permission_mode")
+        if mode:
+            args += ["--permission-mode", mode]
         if self.system_prompt:
             args += ["--append-system-prompt", self.system_prompt]
         args += self.conf.get("args", [])

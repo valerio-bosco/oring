@@ -7,10 +7,11 @@ Client → daemon            {"op": ...}
   cancel                    stop the running turn
   new                       start a new conversation
   select     agent          switch agent (starts a new conversation)
+  auto       value          auto mode on/off: the agent approves safe actions itself (claude-cli)
   permission id, option     answer a permission request (option = optionId, or null to deny)
 
 Daemon → clients           {"ev": ...}, broadcast to every client
-  state      agents, active, busy, language, history, permissions
+  state      agents, active, busy, auto, language, history, permissions
   append     role, text     new history entry (role: user | agent | tool | info | error)
   extend     text           streamed text appended to the last entry
   busy       value
@@ -47,6 +48,7 @@ class Daemon:
         self.state_file = config.state_dir() / "conversation.json"
         self.active = cfg["default_agent"]
         self.history: list[dict] = []
+        self.auto = False           # agents decide on safe actions themselves (where supported)
         self._load_state()
 
     # ── State persistence ──────────────────────────────────────────────────
@@ -56,13 +58,14 @@ class Daemon:
             data = json.loads(self.state_file.read_text())
         except (OSError, ValueError):
             return
+        self.auto = bool(data.get("auto", False))
         if data.get("active") in self.agents:
             self.active = data["active"]
             self.history = data.get("history", [])[-HISTORY_LIMIT:]
             self.agents[self.active].restore(data.get("session"))
 
     def _save_state(self):
-        data = {"active": self.active, "history": self.history[-HISTORY_LIMIT:],
+        data = {"active": self.active, "auto": self.auto, "history": self.history[-HISTORY_LIMIT:],
                 "session": self.agents[self.active].session_state()}
         tmp = self.state_file.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, ensure_ascii=False))
@@ -134,6 +137,7 @@ class Daemon:
             "agents": [{"id": a["id"], "name": a["name"], "type": a["type"]} for a in self.cfg["agents"]],
             "active": self.active,
             "busy": self.busy,
+            "auto": self.auto,
             "language": self.language,
             "history": [{"role": h["role"], "text": h["text"]} for h in self.history],
             "permissions": [{k: p[k] for k in ("id", "title", "options")} for p in self.permissions.values()],
@@ -236,6 +240,10 @@ class Daemon:
             await self.new_conversation()
         elif op == "select":
             await self.select(str(msg.get("agent", "")))
+        elif op == "auto":
+            self.auto = bool(msg.get("value"))
+            self._save_state()
+            await self.broadcast(self.state())
         elif op in ("gate", "approve"):
             allow = await self.gate(msg, always_ask=op == "approve")
             writer.write((json.dumps({"ev": "gate", "allow": allow}) + "\n").encode())

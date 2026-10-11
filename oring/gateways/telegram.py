@@ -4,6 +4,7 @@ Options ([[gateways]] with type = "telegram"):
   token_file      file holding the bot token from @BotFather (keep it private, chmod 600)
   allowed_chats   chat ids allowed to talk to the agents (empty: setup mode, see base.py)
   api_url         default https://api.telegram.org (the tests point it to a fake server)
+  progress        default true; false: only final answers and permission requests (see base.py)
 """
 
 import asyncio
@@ -159,6 +160,9 @@ class TelegramGateway(Gateway):
         if (m.get("document") or {}).get("mime_type", "").startswith("image/"):
             return [m["document"]["file_id"]]                  # sent as a file: not recompressed
         return [] if "text" in m else None
+
+    async def typing(self, chat):
+        await self.call("sendChatAction", chat_id=chat, action="typing")
 
     async def download(self, ref, directory):
         f = await self.call("getFile", file_id=ref)

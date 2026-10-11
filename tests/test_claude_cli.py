@@ -103,3 +103,19 @@ def test_images_are_passed_as_paths(daemon, tmp_path):
         assert c.state()["history"][0]["text"] == "📎 pic.jpg"          # missing files are dropped
     args = calls(log)[0]
     assert args[args.index("-p") + 1] == f"Attached images (open the files to see them):\n{img}"
+
+
+def test_auto_mode(daemon, tmp_path):
+    d, log = setup(daemon, tmp_path, permission_mode="acceptEdits")
+    with d.client() as c:
+        c.turn("one")
+        c.op("auto", value=True)
+        c.turn("two")
+    d.stop()
+    d.start()                                                            # auto mode survives a restart
+    with d.client() as c:
+        assert c.state()["auto"] is True
+    first, second = calls(log)
+    assert first[first.index("--permission-mode") + 1] == "acceptEdits"
+    assert second[second.index("--permission-mode") + 1] == "auto"
+    assert "--permission-prompt-tool" in second                          # risky actions are still asked

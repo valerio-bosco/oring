@@ -15,10 +15,10 @@ def telegram(daemon, tmp_path):
     token = tmp_path / "token"
     token.write_text(TOKEN + "\n")
 
-    def start(allowed=(ME,), agents=None):
+    def start(allowed=(ME,), agents=None, **options):
         d = daemon(agents or [fake_acp_agent("a"), fake_acp_agent("b")],
                    gateways=[{"type": "telegram", "token_file": str(token), "api_url": api.url,
-                              "allowed_chats": list(allowed)}])
+                              "allowed_chats": list(allowed), **options}])
         d.spawn("gateways")
         api.wait_for(lambda t: any(m == "setMyCommands" for m, _ in t.calls))
         return d
@@ -205,3 +205,34 @@ def test_answer_continues_below_a_permission_request(telegram):
     answer = api.wait_for(lambda t: t.find(ME, "allowed"))
     assert answer > asked                                                # visible at the bottom
     assert "allowed" not in api.messages[before]["text"]
+
+
+def test_without_progress_only_the_final_answer(telegram):
+    api, start = telegram
+    start(progress=False)
+    api.user_says(ME, "hello")
+    api.wait_for(lambda t: t.find(ME, "echo 1: hello"))
+    api.user_says(ME, "permission please")
+    asked = api.wait_for(lambda t: t.find(ME, "Run rm -rf /tmp/x"))
+    data = next(d for label, d in api.messages[asked]["buttons"] if label.startswith("✅"))
+    api.user_presses(ME, asked, data)
+    api.wait_for(lambda t: t.find(ME, "allowed"))
+    texts = api.texts(ME)
+    assert texts[0] == "echo 1: hello" and texts[2] == "allowed" and len(texts) == 3   # no tool lines
+    api.user_says(ME, "slow job")
+    api.wait_for(lambda t: any(m == "sendChatAction" for m, _ in t.calls))           # "typing…" instead
+    api.user_says(ME, "/stop")
+    api.wait_for(lambda t: t.find(ME, "Cancelled"))
+
+
+def test_auto_command(telegram):
+    api, start = telegram
+    d = start()
+    api.user_says(ME, "/auto")
+    api.wait_for(lambda t: t.find(ME, "Auto mode on"))
+    with d.client() as c:
+        assert c.state()["auto"] is True
+    api.user_says(ME, "/status")
+    api.wait_for(lambda t: t.find(ME, "Auto mode: on"))
+    api.user_says(ME, "/auto")
+    api.wait_for(lambda t: t.find(ME, "Auto mode off"))
