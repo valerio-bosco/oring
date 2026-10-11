@@ -98,6 +98,28 @@ def _con_conferma(funzione):
     return controllata
 
 
+def _schermo_bloccato() -> bool:
+    """Sessione bloccata (WlSessionLock, il blocco di serpantinum): Hyprland lo indica con "LOCK"
+    tra i motivi per cui il monitor non è in modalità solitaria. loginctl invece non lo sa."""
+    try:
+        return any("LOCK" in (m.get("solitaryBlockedBy") or []) for m in _hyprctl_json("monitors"))
+    except Exception:
+        return False
+
+
+def _se_sbloccato(funzione):
+    """Mouse e tastiera a schermo bloccato finirebbero nella schermata di blocco (anche nel campo
+    della password): vengono rifiutati prima ancora di chiedere conferma."""
+    @functools.wraps(funzione)
+    def controllata(**argomenti):
+        if _schermo_bloccato():
+            raise RuntimeError("Lo schermo è bloccato: mouse e tastiera non sono utilizzabili. Puoi "
+                               "comunque gestire finestre, workspace e app, e vedere o leggere una "
+                               "finestra con screenshot/leggi_testo indicando il parametro finestra.")
+        return funzione(**argomenti)
+    return controllata
+
+
 # ── Finestre e workspace ─────────────────────────────────────────────────────
 
 @mcp.tool()
@@ -204,52 +226,77 @@ def avvia_applicazione(comando: str, workspace: int | None = None) -> str:
 # ── Schermo ──────────────────────────────────────────────────────────────────
 
 def _file_temporaneo(nome: str) -> Path:
-    cartella = Path(tempfile.gettempdir()) / "assistente"
+    cartella = Path(tempfile.gettempdir()) / "oring"
     cartella.mkdir(exist_ok=True)
     return cartella / f"{nome}-{time.time_ns()}.png"
 
 
-def _area(cosa: str, x: int | None, y: int | None, larghezza: int | None, altezza: int | None) -> tuple[int, int, int, int]:
-    """Restituisce (x, y, larghezza, altezza) in coordinate dello schermo."""
-    if cosa == "finestra":
-        a = _hyprctl_json("activewindow")
-        if not a.get("at"):
+def _bersaglio(cosa: str, finestra: str | None, x: int | None = None, y: int | None = None,
+              larghezza: int | None = None, altezza: int | None = None) -> dict:
+    """Cosa catturare: una finestra (cattura diretta della finestra, funziona anche se è coperta,
+    in un altro workspace o con lo schermo bloccato) oppure un'area dello schermo.
+    Restituisce {"finestra": id per grim -T, ...} oppure {"area": (x, y, l, a)}; sempre
+    "origine" (x, y) in coordinate dello schermo e "descrizione"."""
+    if finestra or cosa == "finestra":
+        c = _trova_finestra(finestra) if finestra else _hyprctl_json("activewindow")
+        if not c.get("stableId"):
             raise ValueError("Nessuna finestra attiva")
-        return (*a["at"], *a["size"])
+        return {"finestra": c["stableId"], "origine": tuple(c["at"]), "descrizione": _descrivi(c)}
+    if _schermo_bloccato():
+        raise RuntimeError("Lo schermo è bloccato: si vedrebbe solo la schermata di blocco. Indica una "
+                           "finestra (parametro finestra, vedi elenca_finestre) per catturare quella.")
     if cosa == "area":
         if None in (x, y, larghezza, altezza):
             raise ValueError("Per cosa='area' servono x, y, larghezza e altezza")
-        return (int(x), int(y), int(larghezza), int(altezza))
+        a = (int(x), int(y), int(larghezza), int(altezza))
+        return {"area": a, "origine": a[:2], "descrizione": f"area {a[0]},{a[1]} {a[2]}x{a[3]}"}
     monitor = next((m for m in _hyprctl_json("monitors") if m.get("focused")), None)
     if monitor is None:
         raise RuntimeError("Nessun monitor attivo trovato")
-    return (monitor["x"], monitor["y"], monitor["width"], monitor["height"])
+    a = (monitor["x"], monitor["y"], monitor["width"], monitor["height"])
+    return {"area": a, "origine": a[:2], "descrizione": "schermo intero"}
+
+
+def _cattura(b: dict, nome: str, scala: float | None = None) -> Path:
+    file = _file_temporaneo(nome)
+    if "finestra" in b:
+        args = ["grim", "-T", b["finestra"]]
+    else:
+        ax, ay, aw, ah = b["area"]
+        args = ["grim", "-g", f"{ax},{ay} {aw}x{ah}"]
+    if scala:
+        args += ["-s", str(scala)]
+    # timeout: con il monitor spento grim aspetterebbe all'infinito un fotogramma
+    _esegui(args + [str(file)], timeout=10)
+    return file
 
 
 @mcp.tool()
-def screenshot(cosa: str = "schermo", x: int | None = None, y: int | None = None,
+def screenshot(cosa: str = "schermo", finestra: str | None = None, x: int | None = None, y: int | None = None,
                larghezza: int | None = None, altezza: int | None = None) -> list:
     """Fa uno screenshot e te lo mostra, per vedere cosa c'è sul desktop.
     cosa: "schermo" (tutto il monitor), "finestra" (la finestra attiva) oppure "area" (con x, y,
-    larghezza, altezza in pixel dello schermo). L'immagine è ridotta: insieme all'immagine ricevi
-    come convertire le sue coordinate in coordinate dello schermo (per muovere il mouse o cliccare).
+    larghezza, altezza in pixel dello schermo). finestra: nome o indirizzo di una finestra precisa
+    (come in elenca_finestre): viene catturata anche se è coperta, in un altro workspace o con lo
+    schermo bloccato. L'immagine è ridotta: insieme all'immagine ricevi come convertire le sue
+    coordinate in coordinate dello schermo (per muovere il mouse o cliccare, solo se è visibile).
     Per leggere testo preciso preferisci leggi_testo / trova_testo."""
-    ax, ay, aw, ah = _area(cosa, x, y, larghezza, altezza)
-    scala = 0.4 if cosa == "schermo" else 0.6
-    file = _file_temporaneo("screenshot")
-    _esegui(["grim", "-g", f"{ax},{ay} {aw}x{ah}", "-s", str(scala), str(file)])
-    nota = (f"Immagine ridotta (scala {scala}) dell'area x={ax} y={ay} {aw}x{ah}. "
-            f"Coordinate schermo = (x_immagine / {scala} + {ax}, y_immagine / {scala} + {ay}).")
+    b = _bersaglio(cosa, finestra, x, y, larghezza, altezza)
+    scala = 0.4 if b["descrizione"] == "schermo intero" else 0.6
+    file = _cattura(b, "screenshot", scala)
+    ox, oy = b["origine"]
+    nota = (f"Immagine ridotta (scala {scala}) di: {b['descrizione']}. "
+            f"Coordinate schermo = (x_immagine / {scala} + {ox}, y_immagine / {scala} + {oy}).")
     return [Image(path=str(file)), nota]
 
 
 # ── Lettura del testo sullo schermo (OCR) ────────────────────────────────────
 
-def _ocr_tsv(ax: int, ay: int, aw: int, ah: int, lingua: str) -> list[dict]:
-    file = _file_temporaneo("ocr")
-    _esegui(["grim", "-g", f"{ax},{ay} {aw}x{ah}", str(file)])
+def _ocr_tsv(b: dict, lingua: str) -> list[dict]:
+    file = _cattura(b, "ocr")
     tsv = _esegui(["tesseract", str(file), "-", "-l", lingua, "tsv"], timeout=60)
     file.unlink(missing_ok=True)
+    ox, oy = b["origine"]
     parole = []
     righe = tsv.splitlines()
     for riga in righe[1:]:
@@ -257,31 +304,33 @@ def _ocr_tsv(ax: int, ay: int, aw: int, ah: int, lingua: str) -> list[dict]:
         if len(c) == 12 and c[11].strip() and float(c[10]) > 30:
             parole.append({
                 "testo": c[11], "blocco": (c[2], c[3], c[4]),
-                "x": int(c[6]) + ax, "y": int(c[7]) + ay, "l": int(c[8]), "a": int(c[9]),
+                "x": int(c[6]) + ox, "y": int(c[7]) + oy, "l": int(c[8]), "a": int(c[9]),
             })
     return parole
 
 
 @mcp.tool()
-def leggi_testo(cosa: str = "finestra", lingua: str = "ita+eng", x: int | None = None, y: int | None = None,
+def leggi_testo(cosa: str = "finestra", finestra: str | None = None, lingua: str = "ita+eng",
+                x: int | None = None, y: int | None = None,
                 larghezza: int | None = None, altezza: int | None = None) -> str:
     """Legge il testo visibile sullo schermo con l'OCR. cosa: "finestra" (attiva), "schermo"
-    oppure "area" (x, y, larghezza, altezza). lingua: codici tesseract, es. "ita+eng"."""
-    ax, ay, aw, ah = _area(cosa, x, y, larghezza, altezza)
+    oppure "area" (x, y, larghezza, altezza). finestra: nome o indirizzo di una finestra precisa
+    (funziona anche se coperta, in un altro workspace o a schermo bloccato).
+    lingua: codici tesseract, es. "ita+eng"."""
     righe: dict = {}
-    for p in _ocr_tsv(ax, ay, aw, ah, lingua):
+    for p in _ocr_tsv(_bersaglio(cosa, finestra, x, y, larghezza, altezza), lingua):
         righe.setdefault(p["blocco"], []).append(p["testo"])
     testo = "\n".join(" ".join(r) for r in righe.values())
     return testo or "(nessun testo riconosciuto)"
 
 
 @mcp.tool()
-def trova_testo(testo: str, cosa: str = "schermo", lingua: str = "ita+eng") -> list[dict]:
+def trova_testo(testo: str, cosa: str = "schermo", finestra: str | None = None, lingua: str = "ita+eng") -> list[dict]:
     """Cerca un testo sullo schermo (OCR) e restituisce dove si trova: le coordinate del centro,
-    utili per cliccarci sopra con clicca(x, y). cosa: "schermo" o "finestra" (attiva).
-    Cerca parole o frasi brevi (es. il testo di un pulsante o di un link)."""
-    ax, ay, aw, ah = _area(cosa, None, None, None, None)
-    parole = _ocr_tsv(ax, ay, aw, ah, lingua)
+    utili per cliccarci sopra con clicca(x, y). cosa: "schermo" o "finestra" (attiva); finestra:
+    nome o indirizzo di una finestra precisa. Cerca parole o frasi brevi (es. il testo di un
+    pulsante o di un link)."""
+    parole = _ocr_tsv(_bersaglio(cosa, finestra), lingua)
     cercate = testo.lower().split()
     if not cercate:
         raise ValueError("Testo da cercare vuoto")
@@ -311,6 +360,7 @@ def _muovi(x: int, y: int) -> None:
 
 
 @mcp.tool()
+@_se_sbloccato
 @_con_conferma
 def muovi_mouse(x: int, y: int) -> str:
     """Sposta il cursore del mouse nel punto (x, y) in pixel dello schermo (3440x1440)."""
@@ -319,6 +369,7 @@ def muovi_mouse(x: int, y: int) -> str:
 
 
 @mcp.tool()
+@_se_sbloccato
 @_con_conferma
 def clicca(x: int | None = None, y: int | None = None, tasto: str = "sinistro", doppio: bool = False) -> str:
     """Clicca con il mouse. Se x e y sono indicati, prima sposta lì il cursore (pixel dello schermo).
@@ -337,6 +388,7 @@ def clicca(x: int | None = None, y: int | None = None, tasto: str = "sinistro", 
 
 
 @mcp.tool()
+@_se_sbloccato
 @_con_conferma
 def scorri(direzione: str = "giu", quantita: int = 5, x: int | None = None, y: int | None = None) -> str:
     """Scorre con la rotellina (direzione: "giu", "su", "sinistra", "destra") nella finestra sotto
@@ -362,6 +414,7 @@ NOMI_TASTI = {"invio": "Return", "enter": "Return", "return": "Return", "esc": "
 
 
 @mcp.tool()
+@_se_sbloccato
 @_con_conferma
 def scrivi_testo(testo: str) -> str:
     """Scrive un testo nella finestra che ha il focus, come se lo digitasse l'utente.
@@ -372,6 +425,7 @@ def scrivi_testo(testo: str) -> str:
 
 
 @mcp.tool()
+@_se_sbloccato
 @_con_conferma
 def premi_tasti(combinazione: str) -> str:
     """Preme un tasto o una combinazione nella finestra che ha il focus. Esempi: "invio", "esc",

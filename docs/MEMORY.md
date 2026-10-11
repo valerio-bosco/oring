@@ -20,6 +20,11 @@ correct entries that turn out wrong instead of adding contradictions.
   in `allowed_tools` are asked in the panel instead of being refused in headless mode.
 - **D6 — Gemini dropped from the default config**: nixpkgs marks gemini-cli as replaced by
   Antigravity CLI for free and Google AI Pro/Ultra accounts; `agy` has no ACP (Phase 2).
+- **D8 — Locked screen: refuse blind input, keep per-window vision.** When locked, mouse/keyboard
+  would go to the lock screen (password field), so `_se_sbloccato` refuses them before the
+  confirmation gate. Screenshots/OCR of a *window* keep working (`grim -T`), whole-screen ones are
+  refused: remote use (messaging) can still see app content. Trade-off accepted by the maintainer:
+  the lock protects from people at the desk, not from whoever controls the remote channel.
 - **D7 — Ollama with Vulkan** (`pkgs.ollama-vulkan`): the CUDA build is unfree, not in the binary
   cache, would compile for hours; GTX 1060 3 GB → models up to ~4B parameters.
 
@@ -50,6 +55,10 @@ correct entries that turn out wrong instead of adding contradictions.
 - **G12 — grim hangs when the monitor is off or the session is locked** (`hyprctl monitors`:
   `dpmsStatus: 0`, `solitaryBlockedBy: session lock`): no frames arrive. `scripts/dev shot` uses a
   timeout; visual checks need the user at the screen.
+- **G13 — Lock signal and window capture on Hyprland 0.56**: a WlSessionLock adds `"LOCK"` to
+  `solitaryBlockedBy` in `hyprctl -j monitors` (removed on unlock). `hyprctl clients` exposes
+  `stableId`, which is the ext-foreign-toplevel identifier `grim -T <id>` wants (same as `lswt`);
+  window capture works when locked, covered, or on another workspace.
 - **G11 — Screen coordinates**: grim and Hyprland use logical pixels (monitor size / scale);
   the maintainer's 3440×1440 at scale 1.0667 is 3225×1350 logical.
 
@@ -75,3 +84,5 @@ correct entries that turn out wrong instead of adding contradictions.
   (36 tests, fake ACP agent / OpenAI server / claude CLI / desktop MCP), scripts/check, scripts/dev,
   test skills. Verified: suite green (also in the Nix sandbox), panel load test catches QML errors,
   `scripts/dev start/send/stop`; `scripts/dev shot` not visually verified (screen was off, G12).
+- 2026-10-11 — Step 1.4: locked-screen protection + per-window capture. Verified with a real lock
+  (maintainer unlocked), live capture/OCR of a window on workspace 9, 49 tests green.

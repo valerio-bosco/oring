@@ -35,6 +35,9 @@ through Ollama) and let it act on the desktop.
   closing windows and writing the clipboard are checked by the MCP server itself, which asks
   the daemon. An agent cannot skip this by using its own permission settings, and tools only
   run for the active agent during a turn.
+- **Safe when the screen is locked.** Mouse and keyboard tools refuse while the session is locked
+  (they would type into the lock screen); screenshots and OCR of a specific window keep working,
+  even on another workspace, so remote use can still see what apps show.
 - **Persistent conversation.** It survives closing the panel and restarting the daemon (and
   Claude sessions are resumed).
 - One daemon, many clients: the socket protocol is documented at the top of

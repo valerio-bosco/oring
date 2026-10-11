@@ -25,10 +25,14 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[-]` dropped (s
 - [ ] **1.3 Verify the local model on the GPU**: Ollama (Vulkan) runs `qwen3:4b` on the GTX 1060,
   tool calls work. Done when: `ollama ps` shows GPU offload, a tool-using turn finishes in < 30 s;
   record speed in MEMORY. Skills: `oring-agent-check`.
-- [ ] **1.4 Locked-screen protection**: while the session is locked, mouse/keyboard/screenshot/OCR
+- [x] **1.4 Locked-screen protection**: while the session is locked, mouse/keyboard/screenshot/OCR
   tools refuse with a clear message. First find a reliable lock signal for serpantinum's
   WlSessionLock (`loginctl` LockedHint is not set). Done when: tested by locking for a few seconds
   in a live test; unit test for the refusal path. Skills: `oring-test-suite`, `oring-live-test`.
+  → 2026-10-11: lock signal = "LOCK" in `hyprctl -j monitors` solitaryBlockedBy (verified by a real
+  lock); mouse/keyboard refused when locked; extended with per-window capture (`finestra`
+  parameter, `grim -T stableId`) that works locked and on other workspaces (verified live);
+  13 new tests (tests/test_desktop_mcp.py).
 - [ ] **1.5 Claude streaming**: use `--include-partial-messages` so Claude's text streams like the
   other backends. Done when: panel shows text growing; tests updated with a fake partial stream.
 
