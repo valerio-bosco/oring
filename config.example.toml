@@ -27,6 +27,16 @@ confirm_tools = ["clicca", "scorri", "muovi_mouse", "scrivi_testo", "premi_tasti
 # env = { GITHUB_TOKEN = "..." }
 
 
+# ── Messaging gateways ─────────────────────────────────────────────────────────
+# Talk to the agents from a chat app (`oring gateways`, user service oring-gateways).
+# The conversation is shared with the panel; permission requests become buttons.
+# Commands in the chat: /new, /agent, /stop, /status, /help.
+# [[gateways]]
+# type = "telegram"
+# token_file = "~/.config/oring/telegram-token"   # token from @BotFather; chmod 600, never in Nix
+# allowed_chats = []          # empty = setup mode: the bot replies with your chat id to put here
+
+
 # ── Agents ───────────────────────────────────────────────────────────────────
 # Common options: id, name, type, command, env = { ... }, cwd = "~", system_prompt, confirm_tools
 

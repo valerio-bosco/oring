@@ -40,8 +40,13 @@ through Ollama) and let it act on the desktop.
   even on another workspace, so remote use can still see what apps show.
 - **Persistent conversation.** It survives closing the panel and restarting the daemon (and
   Claude sessions are resumed).
+- **Messaging gateways: use it from your phone.** Telegram today (no open ports: long polling);
+  the platform-independent part (live-updating answers, permission buttons, `/new`, `/agent`,
+  `/stop`, `/status`, chat allowlist) is shared, so other apps only need a small adapter
+  ([`oring/gateways/`](oring/gateways)). Permission requests of turns started at the desk reach
+  the chat too.
 - One daemon, many clients: the socket protocol is documented at the top of
-  [`oring/daemon.py`](oring/daemon.py). A messaging gateway (Telegram, …) is the planned next client.
+  [`oring/daemon.py`](oring/daemon.py).
 
 ## Install (NixOS + home-manager)
 
@@ -70,7 +75,10 @@ programs.oring = {
 hl.bind("SUPER + I", hl.dsp.exec_cmd("oring toggle"))
 ```
 
-This starts two user services, `oring` (daemon) and `oring-ui` (panel). See
+This starts two user services, `oring` (daemon) and `oring-ui` (panel); with `settings.gateways`
+also `oring-gateways`. Telegram: create a bot with @BotFather, save its token in
+`~/.config/oring/telegram-token` (chmod 600), add `{ type = "telegram"; allowed_chats = [ ]; }`
+to `settings.gateways`, message the bot to get your chat id, put it in `allowed_chats`. See
 [`config.example.toml`](config.example.toml) for every option. Without Nix: run `bin/oring daemon`
 and `bin/oring ui` with Python 3.11+ (`mcp`, `httpx`) and Quickshell available.
 

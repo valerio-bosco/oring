@@ -28,6 +28,11 @@ correct entries that turn out wrong instead of adding contradictions.
 - **D9 — Conventional Commits** (maintainer's request, 2026-10-11), enforced by
   `.githooks/commit-msg` (tested in tests/test_commit_msg.py). Commits up to aacfd0c use free
   form and stay as they are (already pushed).
+- **D10 — Gateways are daemon clients with a shared base.** Platform-independent behaviour in
+  `gateways/base.py` (which events reach the chat, live edits, permission buttons, commands,
+  allowlist + setup mode); adapters implement receive/send/edit/answer_button. Turns started at the
+  desk are not mirrored to the chat, their permission requests are. Telegram uses long polling,
+  so no inbound port and no Tailscale needed. The bot token lives in a 600 file, never in Nix.
 - **D7 — Ollama with Vulkan** (`pkgs.ollama-vulkan`): the CUDA build is unfree, not in the binary
   cache, would compile for hours; GTX 1060 3 GB → models up to ~4B parameters.
 
@@ -62,6 +67,9 @@ correct entries that turn out wrong instead of adding contradictions.
   `solitaryBlockedBy` in `hyprctl -j monitors` (removed on unlock). `hyprctl clients` exposes
   `stableId`, which is the ext-foreign-toplevel identifier `grim -T <id>` wants (same as `lswt`);
   window capture works when locked, covered, or on another workspace.
+- **G14 — Gateway races**: a button press can arrive before `send()` returns (register the
+  permission before sending); `/status` right after `/new` can read stale state while the daemon is
+  still closing a turn (`op_and_wait_state` waits for the new state). Both found by the tests.
 - **G11 — Screen coordinates**: grim and Hyprland use logical pixels (monitor size / scale);
   the maintainer's 3440×1440 at scale 1.0667 is 3225×1350 logical.
 
@@ -89,3 +97,6 @@ correct entries that turn out wrong instead of adding contradictions.
   `scripts/dev start/send/stop`; `scripts/dev shot` not visually verified (screen was off, G12).
 - 2026-10-11 — Step 1.4: locked-screen protection + per-window capture. Verified with a real lock
   (maintainer unlocked), live capture/OCR of a window on workspace 9, 49 tests green.
+- 2026-10-11 — Conventional Commits adopted (hook + 15 tests).
+- 2026-10-11 — Step 3.1: messaging gateways (base + Telegram), 8 tests with a fake Bot API;
+  real-bot test pending (needs the maintainer's bot token and chat id).

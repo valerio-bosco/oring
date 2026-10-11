@@ -30,10 +30,12 @@ def toml_value(v):
 
 
 def write_config(path: Path, agents: list[dict], **top):
-    lines = [f"{k} = {toml_value(v)}" for k, v in top.items()]
-    for a in agents:
-        lines.append("[[agents]]")
-        lines += [f"{k} = {toml_value(v)}" for k, v in a.items()]
+    tables = {k: v for k, v in top.items() if isinstance(v, list) and v and isinstance(v[0], dict)}
+    lines = [f"{k} = {toml_value(v)}" for k, v in top.items() if k not in tables]
+    for name, entries in [("agents", agents), *tables.items()]:
+        for entry in entries:
+            lines.append(f"[[{name}]]")
+            lines += [f"{k} = {toml_value(v)}" for k, v in entry.items()]
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -58,6 +60,7 @@ class DaemonProcess:
                     **(env or {})}
         self.socket = self.run / "oring" / "daemon.sock"
         self.log = tmp / "daemon.log"
+        self.children = []
         self.start()
 
     def start(self):
@@ -70,11 +73,22 @@ class DaemonProcess:
                 raise RuntimeError("daemon did not start:\n" + self.log.read_text())
             time.sleep(0.05)
 
+    def spawn(self, *args) -> subprocess.Popen:
+        """Another oring process (e.g. `gateways`) in the same isolated environment."""
+        log = (self.tmp / f"{args[0]}.log").open("a")
+        proc = subprocess.Popen([sys.executable, "-m", "oring", *args], env=self.env, cwd=ROOT,
+                                stdout=log, stderr=subprocess.STDOUT)
+        self.children.append(proc)
+        return proc
+
     def client(self) -> Client:
         return Client(self.socket)
 
     def stop(self, timeout: float = 10) -> float:
         """SIGTERM and wait; returns how long the shutdown took."""
+        for child in self.children:
+            child.terminate()
+            child.wait(10)
         t = time.monotonic()
         self.proc.terminate()
         try:

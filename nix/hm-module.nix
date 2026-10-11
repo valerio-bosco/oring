@@ -39,6 +39,13 @@ in
       description = "Agent CLIs made available to the daemon (in addition to the user's PATH).";
     };
 
+    gateways.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = cfg.settings ? gateways && cfg.settings.gateways != [ ];
+      defaultText = lib.literalMD "true when `settings.gateways` is not empty";
+      description = "Run the messaging gateways (`oring gateways`) as a user service.";
+    };
+
     environment = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
       default = { };
@@ -72,6 +79,21 @@ in
           ExecStart = "${cfg.package}/bin/oring daemon";
           Restart = "on-failure";
           Environment = [ "PATH=${path}" ] ++ env;
+        };
+        Install.WantedBy = [ "graphical-session.target" ];
+      };
+      oring-gateways = lib.mkIf cfg.gateways.enable {
+        Unit = {
+          Description = "oring messaging gateways";
+          After = [ "oring.service" ];
+          PartOf = [ "graphical-session.target" ];
+          X-Restart-Triggers = [ "${configFile}" ];
+        };
+        Service = {
+          ExecStart = "${cfg.package}/bin/oring gateways";
+          Restart = "always";
+          RestartSec = 10;
+          Environment = env;
         };
         Install.WantedBy = [ "graphical-session.target" ];
       };

@@ -14,7 +14,7 @@ commit-msg: not a Conventional Commit:
   $subject
 expected  <type>(<scope>): <summary>     e.g.  fix(acp): restart the agent after a crash
 types     ${types//|/, }
-scopes    daemon, ui, mcp, acp, claude, openai, client, config, nix, tests, scripts, skills, docs
+scopes    daemon, ui, mcp, acp, claude, openai, client, config, gateways, nix, tests, scripts, skills, docs
 MSG
   exit 1
 fi

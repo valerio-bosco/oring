@@ -14,6 +14,7 @@ ui/shell.qml            panel (Quickshell/QML): reads serpantinum colors, talks 
 oring/daemon.py         daemon: conversation, clients, permissions, confirmation gate; protocol in its docstring
 oring/backends/         claude_cli.py (claude -p), acp.py (Agent Client Protocol), openai.py (chat completions)
 oring/client.py         sync socket client: `oring send/state/select/new/cancel`, tests, skills
+oring/gateways/         messaging gateways: base.py (platform-independent), telegram.py (adapter)
 oring/config.py         config.toml loading, paths (socket, state)
 oring/labels.py         human-readable tool-call labels (it/en)
 mcp/desktop_mcp.py      desktop MCP server (Hyprland 0.56 Lua dispatchers, serpantinum IPC); risky tools gated
@@ -90,7 +91,7 @@ nix build                  # the package
 - **type**: `feat` (user-visible feature), `fix` (bug), `docs`, `test`, `refactor` (no behaviour
   change), `perf`, `build` (Nix packaging, flake), `ci`, `chore` (maintenance), `style`, `revert`.
 - **scope** (optional, one): `daemon`, `ui`, `mcp`, `acp`, `claude`, `openai`, `client`, `config`,
-  `nix`, `tests`, `scripts`, `skills`, `docs`.
+  `gateways`, `nix`, `tests`, `scripts`, `skills`, `docs`.
 - **summary**: English, imperative ("add", not "added"), lowercase start, no final period,
   subject line ≤ 72 characters.
 - **body**: after a blank line; explain the why and how it was verified (tests, live checks).

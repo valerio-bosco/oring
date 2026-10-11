@@ -1,6 +1,7 @@
 """oring control commands (python -m oring <command>):
 
   daemon                         run the daemon
+  gateways                       run the messaging gateways ([[gateways]] in the config)
   send [--auto allow|deny] TEXT  send a message, print the answer (permissions: panel, or answered)
   state                          print agents, active agent, busy flag and history as JSON
   select AGENT                   switch agent (starts a new conversation)
@@ -30,6 +31,11 @@ def main():
         import asyncio
         from .daemon import serve
         asyncio.run(serve())
+        return
+    if cmd == "gateways":
+        import asyncio
+        from .gateways import serve as serve_gateways
+        asyncio.run(serve_gateways())
         return
 
     if cmd == "send" and len(args) > 1:

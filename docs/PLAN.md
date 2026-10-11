@@ -46,11 +46,18 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[-]` dropped (s
 
 ## Phase 3 — Remote use
 
-- [ ] **3.1 Telegram gateway** as a daemon client (`oring/gateways/telegram.py` or a separate
+- [~] **3.1 Telegram gateway** as a daemon client (`oring/gateways/telegram.py` or a separate
   service): allowlisted chat id, permission requests as inline buttons, `/new`, `/agent`, `/stop`.
   Done when: tested with a test bot; unauthorized chats ignored (test).
-- [ ] **3.2 Suspend policy** decided with the maintainer (no auto-suspend vs Wake-on-LAN) and
+  → 2026-10-11: implemented with a platform-independent base (gateways/base.py) + Telegram adapter,
+  `oring gateways` + HM service; 8 end-to-end tests against a fake Bot API. Missing: real bot test
+  with the maintainer's account.
+- [x] **3.2 Suspend policy** decided with the maintainer (no auto-suspend vs Wake-on-LAN) and
   documented; implemented in the maintainer's NixOS config, not in oring.
+  → 2026-10-11: no automatic suspend (`idle.actions.suspend.enabled = false` in /etc/nixos,
+  commit a36f357: NVIDIA does not resume well from S3 anyway); lock and DPMS stay.
+- [ ] **3.3 More gateways** (as wanted): Discord, Signal (signal-cli), Matrix; WhatsApp only with an
+  official Business API account. Each is an adapter of `Gateway` (receive/send/edit/answer_button).
 
 ## Phase 4 — Publish
 
