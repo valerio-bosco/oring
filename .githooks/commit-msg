@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Rejects commit messages that are not Conventional Commits (see AGENTS.md, "Commits").
+# Enable once per clone:  git config core.hooksPath .githooks
+set -euo pipefail
+subject=$(grep -v '^#' "$1" | head -n1)
+
+# messages git writes itself
+if [[ $subject =~ ^(Merge|Revert\ \"|fixup!|squash!|amend!) ]]; then exit 0; fi
+
+types='feat|fix|docs|test|refactor|perf|build|ci|chore|style|revert'
+if ! [[ $subject =~ ^($types)(\([a-z0-9-]+\))?!?:\ [^[:space:]] ]]; then
+  cat >&2 <<MSG
+commit-msg: not a Conventional Commit:
+  $subject
+expected  <type>(<scope>): <summary>     e.g.  fix(acp): restart the agent after a crash
+types     ${types//|/, }
+scopes    daemon, ui, mcp, acp, claude, openai, client, config, nix, tests, scripts, skills, docs
+MSG
+  exit 1
+fi
+summary=${subject#*: }
+if (( ${#subject} > 72 )); then echo "commit-msg: subject longer than 72 characters (${#subject})" >&2; exit 1; fi
+if [[ $summary =~ ^[A-Z][a-z] ]]; then echo "commit-msg: start the summary in lowercase: $summary" >&2; exit 1; fi
+if [[ $summary =~ \.$ ]]; then echo "commit-msg: no period at the end of the subject" >&2; exit 1; fi
+if [ "$(grep -v '^#' "$1" | sed -n 2p)" != "" ]; then echo "commit-msg: leave a blank line after the subject" >&2; exit 1; fi

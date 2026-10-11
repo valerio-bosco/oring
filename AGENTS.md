@@ -73,4 +73,32 @@ nix build                  # the package
   do not build Claude support on the Agent SDK or ACP adapters with subscription logins (MEMORY D2).
 - Keep the daemon protocol backward compatible or update `ui/shell.qml`, `oring/client.py` and the
   protocol docstring together.
-- Commit messages: imperative summary line, body with the why; keep commits focused.
+
+## Commits
+
+[Conventional Commits](https://www.conventionalcommits.org), enforced by `.githooks/commit-msg`
+(enable once per clone: `git config core.hooksPath .githooks`).
+
+```
+<type>(<scope>): <summary>
+
+<body: why the change, what was verified>
+
+<footers: BREAKING CHANGE: …, Co-Authored-By: …>
+```
+
+- **type**: `feat` (user-visible feature), `fix` (bug), `docs`, `test`, `refactor` (no behaviour
+  change), `perf`, `build` (Nix packaging, flake), `ci`, `chore` (maintenance), `style`, `revert`.
+- **scope** (optional, one): `daemon`, `ui`, `mcp`, `acp`, `claude`, `openai`, `client`, `config`,
+  `nix`, `tests`, `scripts`, `skills`, `docs`.
+- **summary**: English, imperative ("add", not "added"), lowercase start, no final period,
+  subject line ≤ 72 characters.
+- **body**: after a blank line; explain the why and how it was verified (tests, live checks).
+- **breaking changes** (socket protocol, config format, CLI): `!` after the scope and a
+  `BREAKING CHANGE:` footer.
+- One logical change per commit; a plan step may need several commits. Agents add a
+  `Co-Authored-By:` footer naming themselves.
+
+Examples: `feat(mcp): capture a window even when the screen is locked` ·
+`fix(daemon): close client connections on shutdown` · `docs(plan): tick step 1.4` ·
+`test(acp): cover agent crash and restart` · `build(nix): run the test suite in flake checks`

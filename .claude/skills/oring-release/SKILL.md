@@ -13,9 +13,13 @@ description: Finish a development step in oring - full pipeline, plan and memory
 4. **Docs**: README/`config.example.toml` if user-visible behaviour or options changed; the
    protocol docstring in `oring/daemon.py` if the socket protocol changed; `AGENTS.md` if the
    structure, commands or rules changed.
-5. **Commit** in the oring repo (as the repo owner if you are root: `runuser -u voodoo -- git …`):
-   focused, imperative summary, body with the why and the verification. Show `git status` clean.
-   Never push — the maintainer pushes.
+5. **Commit** in the oring repo (as the repo owner if you are root: `runuser -u voodoo -- git …`)
+   with a **Conventional Commit** message (format and scopes in AGENTS.md → Commits), e.g.
+   `feat(mcp): refuse mouse and keyboard while the screen is locked`, body with the why and the
+   verification, `Co-Authored-By:` footer. The `commit-msg` hook rejects other formats: make sure
+   `git config core.hooksPath` is `.githooks`. Split unrelated changes (code / plan+memory docs
+   may go together with the change they describe). Show `git status` clean. Never push — the
+   maintainer pushes.
 6. **Deploy (only when the user asks)** on the maintainer's machine:
    ```sh
    sudo nix flake update oring --flake /etc/nixos

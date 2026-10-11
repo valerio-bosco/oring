@@ -25,6 +25,9 @@ correct entries that turn out wrong instead of adding contradictions.
   confirmation gate. Screenshots/OCR of a *window* keep working (`grim -T`), whole-screen ones are
   refused: remote use (messaging) can still see app content. Trade-off accepted by the maintainer:
   the lock protects from people at the desk, not from whoever controls the remote channel.
+- **D9 — Conventional Commits** (maintainer's request, 2026-10-11), enforced by
+  `.githooks/commit-msg` (tested in tests/test_commit_msg.py). Commits up to aacfd0c use free
+  form and stay as they are (already pushed).
 - **D7 — Ollama with Vulkan** (`pkgs.ollama-vulkan`): the CUDA build is unfree, not in the binary
   cache, would compile for hours; GTX 1060 3 GB → models up to ~4B parameters.
 
