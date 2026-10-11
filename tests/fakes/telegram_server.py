@@ -49,6 +49,7 @@ class FakeTelegram:
         self.messages = {}          # message_id → {chat, text, buttons, history}
         self.calls = []             # (method, params)
         self.reject_html = False
+        self.files = {}             # file_id → bytes, downloadable through getFile
         self.ids = itertools.count(1)
         self.update_ids = itertools.count(1)
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
@@ -62,6 +63,19 @@ class FakeTelegram:
     def user_says(self, chat: int, text: str):
         self._push({"message": {"message_id": next(self.ids), "chat": {"id": chat, "type": "private"},
                                 "from": {"id": chat}, "text": text}})
+
+    def user_sends_photo(self, chat: int, data: bytes | None, caption: str | None = None):
+        """data None: a photo whose download fails."""
+        file_id = f"photo{next(self.ids)}"
+        if data is not None:
+            self.files[file_id] = data
+        sizes = [{"file_id": "thumb-not-downloadable", "width": 90, "height": 90},
+                 {"file_id": file_id, "width": 1280, "height": 960}]
+        msg = {"message_id": next(self.ids), "chat": {"id": chat, "type": "private"}, "from": {"id": chat},
+               "photo": sizes}
+        if caption is not None:
+            msg["caption"] = caption
+        self._push({"message": msg})
 
     def user_presses(self, chat: int, message_id: int, data: str):
         self._push({"callback_query": {"id": f"cb{next(self.ids)}", "data": data, "from": {"id": chat},
@@ -97,6 +111,10 @@ class FakeTelegram:
             self.lock.notify_all()
         if method == "getMe":
             return {"id": 1, "is_bot": True, "username": "oring_test_bot"}
+        if method == "getFile":
+            if p["file_id"] not in self.files:
+                raise ValueError("Bad Request: invalid file_id")
+            return {"file_id": p["file_id"], "file_path": f"photos/{p['file_id']}.jpg"}
         if method == "getUpdates":
             deadline = time.monotonic() + 0.5
             with self.lock:
@@ -155,5 +173,16 @@ class FakeTelegram:
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
                 self.wfile.write(data)
+
+            def do_GET(self):                        # file downloads: /file/bot<token>/photos/<id>.jpg
+                parts = self.path.split("/")
+                file_id = parts[-1].rsplit(".", 1)[0]
+                if parts[1:3] != ["file", f"bot{TOKEN}"] or file_id not in fake.files:
+                    self.send_error(404)
+                    return
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(fake.files[file_id])))
+                self.end_headers()
+                self.wfile.write(fake.files[file_id])
 
         return Handler

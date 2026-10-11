@@ -33,6 +33,11 @@ correct entries that turn out wrong instead of adding contradictions.
   allowlist + setup mode); adapters implement receive/send/edit/answer_button. Turns started at the
   desk are not mirrored to the chat, their permission requests are. Telegram uses long polling,
   so no inbound port and no Tailscale needed. The bot token lives in a 600 file, never in Nix.
+- **D11 — Images travel as files.** Gateways save received images to `<state>/oring/inbox` (newest
+  50 kept, only from allowed chats) and send `{"op": "send", text, images: [paths]}`. Backends
+  pass them natively where possible (ACP agents declaring `promptCapabilities.image`, OpenAI agents
+  with `vision = true`), otherwise as paths in the text: Claude Code opens them with Read (allowed
+  by default). The panel only shows "📎 name" lines in the user entry; no protocol break.
 - **D7 — Ollama with Vulkan** (`pkgs.ollama-vulkan`): the CUDA build is unfree, not in the binary
   cache, would compile for hours; GTX 1060 3 GB → models up to ~4B parameters.
 
@@ -119,3 +124,5 @@ correct entries that turn out wrong instead of adding contradictions.
   open items S2–S6 in PLAN Phase 1b.
 - 2026-10-11 — Telegram messages rendered as formatted text (Markdown → HTML, plain-text fallback,
   G17); 87 tests pass. Not deployed yet.
+- 2026-10-11 — Images from Telegram reach the agents (D11): photos and image files, caption as
+  text; 94 tests pass. Not deployed yet.

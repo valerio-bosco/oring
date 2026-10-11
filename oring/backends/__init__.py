@@ -2,12 +2,27 @@
 daemon.add(role, text, stream) and daemon.ask_permission(title, options)."""
 
 import asyncio
+import base64
 import collections
+import mimetypes
 import os
 import shlex
 from pathlib import Path
 
 from .. import config
+
+
+def with_paths(text: str, images) -> str:
+    """For agents that cannot take images in the prompt: they open the files with their own tools."""
+    if not images:
+        return text
+    return (text + "\n\n" if text else "") + "Attached images (open the files to see them):\n" + "\n".join(images)
+
+
+def image_data(path: str) -> tuple[str, str]:
+    """(mime type, base64 data) of an image file."""
+    mime = mimetypes.guess_type(path)[0] or "image/jpeg"
+    return mime, base64.b64encode(Path(path).read_bytes()).decode()
 
 
 class Backend:
@@ -37,7 +52,8 @@ class Backend:
     def cwd(self) -> str:
         return os.path.expanduser(self.conf.get("cwd", "~"))
 
-    async def prompt(self, text: str):
+    async def prompt(self, text: str, images: list[str] = ()):
+        """Run a turn; images are paths of image files sent along with the text."""
         raise NotImplementedError
 
     async def cancel(self):

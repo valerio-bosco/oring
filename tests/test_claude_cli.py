@@ -90,3 +90,16 @@ def test_new_conversation_drops_session(daemon, tmp_path):
         c.state()
         c.turn("b")
     assert "--resume" not in calls(log)[1]
+
+
+def test_images_are_passed_as_paths(daemon, tmp_path):
+    d, log = setup(daemon, tmp_path)
+    img = tmp_path / "pic.jpg"
+    img.write_bytes(b"jpeg")
+    with d.client() as c:
+        c.op("send", text="", images=[str(img), str(tmp_path / "missing.jpg")])
+        while (ev := c.event(10)) and not (ev["ev"] == "busy" and ev["value"] is False):
+            pass
+        assert c.state()["history"][0]["text"] == "📎 pic.jpg"          # missing files are dropped
+    args = calls(log)[0]
+    assert args[args.index("-p") + 1] == f"Attached images (open the files to see them):\n{img}"

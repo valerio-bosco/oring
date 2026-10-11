@@ -11,6 +11,7 @@ import html
 import logging
 import os
 import re
+import time
 
 import httpx
 
@@ -108,7 +109,8 @@ class TelegramGateway(Gateway):
             token = open(path).read().strip()
         except OSError as e:
             raise RuntimeError(f"telegram: cannot read the bot token from {path}: {e}") from e
-        self.base = f"{conf.get('api_url', 'https://api.telegram.org').rstrip('/')}/bot{token}"
+        api = conf.get("api_url", "https://api.telegram.org").rstrip("/")
+        self.base, self.files = f"{api}/bot{token}", f"{api}/file/bot{token}"
         self.http = httpx.AsyncClient(timeout=httpx.Timeout(POLL_TIMEOUT + 15, connect=10))
         self.offset = 0
 
@@ -139,14 +141,33 @@ class TelegramGateway(Gateway):
                 continue
             for u in updates:
                 self.offset = u["update_id"] + 1
-                if "message" in u and "text" in u["message"]:
+                if "message" in u and (images := self._images(u["message"])) is not None:
                     m = u["message"]
-                    yield Incoming(chat=str(m["chat"]["id"]), text=m["text"])
+                    yield Incoming(chat=str(m["chat"]["id"]), text=m.get("text") or m.get("caption") or "",
+                                   images=images)
                 elif "callback_query" in u:
                     q = u["callback_query"]
                     msg = q.get("message") or {}
                     yield Incoming(chat=str(msg.get("chat", {}).get("id", "")), button=q.get("data", ""),
                                    ref=msg.get("message_id"), callback=q["id"])
+
+    @staticmethod
+    def _images(m: dict) -> list | None:
+        """file_ids of the images in a message ([] for plain text), None for anything else."""
+        if m.get("photo"):
+            return [m["photo"][-1]["file_id"]]                 # sizes in ascending order
+        if (m.get("document") or {}).get("mime_type", "").startswith("image/"):
+            return [m["document"]["file_id"]]                  # sent as a file: not recompressed
+        return [] if "text" in m else None
+
+    async def download(self, ref, directory):
+        f = await self.call("getFile", file_id=ref)
+        r = await self.http.get(f"{self.files}/{f['file_path']}")
+        if r.status_code != 200:                    # not raise_for_status: its message holds the token
+            raise RuntimeError(f"telegram file download: HTTP {r.status_code}")
+        path = directory / f"{int(time.time() * 1000)}-{os.path.basename(f['file_path'])}"
+        path.write_bytes(r.content)
+        return path
 
     @staticmethod
     def _keyboard(buttons):

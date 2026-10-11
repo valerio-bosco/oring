@@ -149,3 +149,45 @@ def test_rejected_markup_falls_back_to_plain_text(telegram):
 def test_to_html(md, html):
     assert to_html(md) == html
     render_html(html)                                                    # valid for Telegram
+
+
+JPEG = b"\xff\xd8\xff\xe0fake jpeg"
+
+
+def test_photo_reaches_the_agent_as_a_file(telegram):
+    api, start = telegram
+    d = start()
+    api.user_sends_photo(ME, JPEG, caption="what is this?")
+    mid = api.wait_for(lambda t: t.find(ME, "Attached images"))
+    path = api.messages[mid]["text"].split("\n")[-1].removesuffix(" …")
+    assert api.messages[mid]["text"].startswith("⚙ ") and "echo 1: what is this?" in api.messages[mid]["text"]
+    assert path.startswith(str(d.tmp / "state" / "oring" / "inbox")) and open(path, "rb").read() == JPEG
+    with d.client() as c:
+        assert c.state()["history"][0]["text"] == f"what is this?\n📎 {path.rsplit('/', 1)[1]}"
+
+
+def test_photo_as_image_block(telegram, tmp_path):
+    api, start = telegram
+    log = tmp_path / "prompts.log"
+    start(agents=[fake_acp_agent("a", env={"FAKE_ACP_IMAGES": "1", "FAKE_ACP_LOG": str(log)})])
+    api.user_sends_photo(ME, JPEG)                                       # no caption
+    api.wait_for(lambda t: t.find(ME, "echo 1:"))
+    assert log.read_text().splitlines()[-1].endswith(f'"", "<image image/jpeg {len(JPEG)}>"]')
+
+
+def test_photo_from_unauthorized_chat_is_not_downloaded(telegram):
+    api, start = telegram
+    start()
+    api.user_sends_photo(STRANGER, JPEG)
+    api.user_says(ME, "ping")
+    api.wait_for(lambda t: t.find(ME, "echo 1: ping"))
+    assert not any(m == "getFile" for m, _ in api.calls)
+
+
+def test_failed_download_is_reported(telegram):
+    api, start = telegram
+    start()
+    api.user_sends_photo(ME, None)                                       # getFile fails
+    api.wait_for(lambda t: t.find(ME, "Could not download"))
+    api.user_says(ME, "ping")
+    api.wait_for(lambda t: t.find(ME, "echo 1: ping"))                   # the chat is not stuck

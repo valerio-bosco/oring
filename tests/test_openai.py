@@ -73,3 +73,20 @@ def test_http_error(daemon, tmp_path):
     with d.client() as c:
         entries = transcript(c.turn("hi"))
     assert entries[-1]["role"] == "error"
+
+
+@pytest.mark.parametrize("vision", [True, False])
+def test_images(daemon, tmp_path, fake_api, vision):
+    img = tmp_path / "pic.png"
+    img.write_bytes(b"\x89PNG fake")
+    d, _ = start(daemon, tmp_path, fake_api, vision=vision)
+    with d.client() as c:
+        c.op("send", text="look", images=[str(img)])
+        while (ev := c.event(10)) and not (ev["ev"] == "busy" and ev["value"] is False):
+            pass
+    content = fake_api.requests[0]["messages"][-1]["content"]
+    if vision:
+        assert content == [{"type": "text", "text": "look"},
+                           {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORyBmYWtl"}}]
+    else:
+        assert content == f"look\n\nAttached images (open the files to see them):\n{img}"

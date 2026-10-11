@@ -5,7 +5,8 @@ live-updating answers, permission buttons, commands and the chat allowlist. A pl
 implements the small adapter interface at the bottom of `Gateway` (see telegram.py).
 
 Behaviour:
-- Messages from allowed chats start a turn with the active agent; the answer appears in one
+- Messages from allowed chats start a turn with the active agent (images are saved to the inbox in
+  the state directory and passed to the agent as files); the answer appears in one
   message that is edited while the agent works (tool calls as "⚙ …" lines).
 - Turns started elsewhere (the panel) are not mirrored, but their permission requests are sent to
   every allowed chat, so they can be answered remotely. A request answered elsewhere is closed.
@@ -19,6 +20,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from .. import config
 
@@ -38,6 +40,7 @@ STRINGS = {
         "done": "✓ Fatto.", "offline": "Il daemon di oring non è raggiungibile.",
         "setup": "oring: questa chat non è ancora autorizzata.\nAggiungi questo id ad allowed_chats: {chat}",
         "cancelled": "Interrotto", "busy_err": "Occupato",
+        "image_failed": "⚠ Non sono riuscito a scaricare l'immagine, riprova.",
     },
     "en": {
         "help": "Write to me and I pass the message to the active agent.\n/new new conversation\n"
@@ -52,6 +55,7 @@ STRINGS = {
         "done": "✓ Done.", "offline": "The oring daemon is unreachable.",
         "setup": "oring: this chat is not authorized yet.\nAdd this id to allowed_chats: {chat}",
         "cancelled": "Cancelled", "busy_err": "Busy",
+        "image_failed": "⚠ Could not download the image, please try again.",
     },
 }
 
@@ -63,13 +67,24 @@ COMMANDS = {
 }
 MAX_MESSAGE = 3800          # platforms limit message length (Telegram: 4096)
 EDIT_INTERVAL = 1.5         # seconds between edits of a live message (rate limits)
+INBOX_KEEP = 50             # received images kept on disk (the agents read them from there)
+
+
+def inbox() -> Path:
+    """Directory for images received from the chats; only the newest INBOX_KEEP files are kept."""
+    d = config.state_dir() / "inbox"
+    d.mkdir(exist_ok=True)
+    for old in sorted(d.iterdir(), key=lambda p: p.stat().st_mtime)[:-INBOX_KEEP]:
+        old.unlink(missing_ok=True)
+    return d
 
 
 @dataclass
 class Incoming:
     """Something the user did in the chat app."""
     chat: str
-    text: str = ""                 # a message (commands start with "/")
+    text: str = ""                 # a message (commands start with "/"), or an image caption
+    images: list = field(default_factory=list)     # platform references of attached images
     button: str | None = None      # or a button press: its data
     ref: object = None             # platform reference of the message holding the button
     callback: object = None        # platform reference to acknowledge the button press
@@ -188,12 +203,19 @@ class Gateway:
             await self.on_button(inc)
         elif inc.text.startswith("/"):
             await self.on_command(inc.chat, inc.text[1:].split()[0].split("@")[0].lower())
-        elif inc.text.strip():
+        elif inc.text.strip() or inc.images:
             if self.state["busy"] or self.pending_chat:
                 await self.send(inc.chat, self.tr("busy"))
                 return
             self.pending_chat = inc.chat
-            await self.op("send", text=inc.text)
+            try:
+                images = [str(await self.download(ref, inbox())) for ref in inc.images]
+            except Exception as e:
+                log.warning("%s: could not download an image: %s", self.name, e)
+                self.pending_chat = None
+                await self.send(inc.chat, self.tr("image_failed"))
+                return
+            await self.op("send", text=inc.text, images=images)
 
     async def on_command(self, chat: str, cmd: str):
         if cmd == "new":
@@ -348,3 +370,7 @@ class Gateway:
 
     async def answer_button(self, callback, text: str | None = None):
         """Acknowledge a button press (some platforms show a spinner until then)."""
+
+    async def download(self, ref, directory: Path) -> Path:
+        """Save an attached image (Incoming.images entry) into directory; returns its path."""
+        raise NotImplementedError

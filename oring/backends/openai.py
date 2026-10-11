@@ -4,7 +4,8 @@ OpenRouter, ... The model gets the MCP servers' tools as functions; oring runs t
 Options:  model (required), base_url (default Ollama: http://localhost:11434/v1),
           api_key_env (name of the environment variable holding the key, if any),
           permissions: "allow" (default) | "ask" | "deny" for tool calls,
-          max_steps (default 12): tool calls allowed in one turn.
+          max_steps (default 12): tool calls allowed in one turn,
+          vision (default false): the model takes images; otherwise it gets their file paths.
 """
 
 import asyncio
@@ -16,7 +17,7 @@ import httpx
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from . import Backend
+from . import Backend, image_data, with_paths
 from ..labels import describe
 
 log = logging.getLogger("oring.openai")
@@ -90,10 +91,17 @@ class OpenAIBackend(Backend):
                 "name": fname, "description": t.description or "", "parameters": t.inputSchema}})
         return tools
 
-    async def prompt(self, text: str):
+    async def prompt(self, text: str, images: list[str] = ()):
         if not self.messages and self.system_prompt:
             self.messages.append({"role": "system", "content": self.system_prompt})
-        self.messages.append({"role": "user", "content": text})
+        if images and self.conf.get("vision"):
+            content = [{"type": "text", "text": text}]
+            for path in images:
+                mime, data = image_data(path)
+                content.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{data}"}})
+        else:
+            content = with_paths(text, images)
+        self.messages.append({"role": "user", "content": content})
         tools = await self._tools()
         base = self.conf.get("base_url", "http://localhost:11434/v1").rstrip("/")
         headers = {}

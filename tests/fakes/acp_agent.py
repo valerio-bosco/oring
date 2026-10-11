@@ -5,9 +5,12 @@
   contains "crash"       → exits immediately
   anything else          → a tool_call titled "desktop_elenca_finestre", then "echo <n>: <text>"
                            in two chunks (n counts the prompts of the session)
-The prompt blocks are recorded in $FAKE_ACP_LOG (one JSON line per prompt), if set.
+The prompt blocks are recorded in $FAKE_ACP_LOG (one JSON line per prompt), if set: text blocks as
+their text, image blocks as "<image MIME BYTES>". With $FAKE_ACP_IMAGES the agent declares that it
+takes images in prompts.
 """
 
+import base64
 import json
 import os
 import sys
@@ -47,11 +50,12 @@ def ask(method, params):
 
 def prompt(rid, params):
     session = params["sessionId"]
-    texts = [b.get("text", "") for b in params["prompt"]]
+    blocks = [b["text"] if b["type"] == "text" else f"<image {b['mimeType']} {len(base64.b64decode(b['data']))}>"
+              for b in params["prompt"]]
     if os.environ.get("FAKE_ACP_LOG"):
         with open(os.environ["FAKE_ACP_LOG"], "a") as f:
-            f.write(json.dumps(texts) + "\n")
-    text = texts[-1]
+            f.write(json.dumps(blocks) + "\n")
+    text = [b["text"] for b in params["prompt"] if b["type"] == "text"][-1]
     sessions[session] += 1
 
     if "crash" in text:
@@ -90,7 +94,8 @@ def main():
             pending[rid]["result"] = msg.get("result") or {}
             pending[rid]["event"].set()
         elif method == "initialize":
-            send({"id": rid, "result": {"protocolVersion": 1, "agentCapabilities": {}, "authMethods": []}})
+            caps = {"promptCapabilities": {"image": True}} if os.environ.get("FAKE_ACP_IMAGES") else {}
+            send({"id": rid, "result": {"protocolVersion": 1, "agentCapabilities": caps, "authMethods": []}})
         elif method == "session/new":
             if os.environ.get("FAKE_ACP_AUTH"):
                 send({"id": rid, "error": {"code": -32000, "message": "Authentication required"}})

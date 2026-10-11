@@ -13,7 +13,7 @@ import asyncio
 import json
 import os
 
-from . import Backend, StderrTail, which
+from . import Backend, StderrTail, which, with_paths
 from .. import config
 from ..labels import describe
 
@@ -59,8 +59,8 @@ class ClaudeCliBackend(Backend):
             args += ["--resume", self.session_id]
         return args
 
-    async def prompt(self, text: str):
-        args = self._arguments(text)
+    async def prompt(self, text: str, images: list[str] = ()):
+        args = self._arguments(with_paths(text, images))      # Claude Code reads images with Read
         if not which(args[0]):
             raise RuntimeError(f"'{args[0]}' not found: is Claude Code installed?")
         # stdin closed: otherwise Claude Code waits 3 seconds for input that never comes

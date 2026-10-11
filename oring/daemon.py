@@ -3,7 +3,7 @@ connect to a Unix socket and exchange newline-delimited JSON.
 
 Client → daemon            {"op": ...}
   hello                     → full "state" event
-  send       text           start a turn with the active agent
+  send       text, images?  start a turn with the active agent (images: paths of image files)
   cancel                    stop the running turn
   new                       start a new conversation
   select     agent          switch agent (starts a new conversation)
@@ -145,21 +145,23 @@ class Daemon:
         self.busy = value
         await self.broadcast({"ev": "busy", "value": value})
 
-    async def send(self, text: str):
+    async def send(self, text: str, images: list[str] = ()):
         text = text.strip()
-        if not text:
+        images = [p for p in images if os.path.isfile(p)]
+        if not text and not images:
             return
         if self.busy:
             await self.add("error", "busy")
             return
-        await self.add("user", text)
+        shown = ([text] if text else []) + [f"📎 {os.path.basename(p)}" for p in images]
+        await self.add("user", "\n".join(shown))
         await self._set_busy(True)
-        self.turn = asyncio.create_task(self._run_turn(text))
+        self.turn = asyncio.create_task(self._run_turn(text, images))
 
-    async def _run_turn(self, text: str):
+    async def _run_turn(self, text: str, images: list[str] = ()):
         agent = self.agents[self.active]
         try:
-            await agent.prompt(text)
+            await agent.prompt(text, images)
         except asyncio.CancelledError:
             await self.add("info", "cancelled")
         except Exception as e:  # shown to the user: the turn failed, the daemon goes on
@@ -227,7 +229,7 @@ class Daemon:
             writer.write((json.dumps(self.state(), ensure_ascii=False) + "\n").encode())
             await writer.drain()
         elif op == "send":
-            await self.send(str(msg.get("text", "")))
+            await self.send(str(msg.get("text", "")), [str(p) for p in msg.get("images") or []])
         elif op == "cancel":
             await self.cancel()
         elif op == "new":

@@ -11,7 +11,7 @@ import itertools
 import json
 import logging
 
-from . import Backend, StderrTail, which
+from . import Backend, StderrTail, image_data, which, with_paths
 from ..labels import describe
 
 log = logging.getLogger("oring.acp")
@@ -139,14 +139,21 @@ class AcpBackend(Backend):
 
     # ── Turns ───────────────────────────────────────────────────────────────
 
-    async def prompt(self, text: str):
+    async def prompt(self, text: str, images: list[str] = ()):
         async with self.lock:
             await self._ensure_session()
             blocks = []
             # ACP has no system prompt: it is sent along with the first message of each session
             if self._first_prompt and self.system_prompt and self.conf.get("send_system_prompt", True):
                 blocks.append({"type": "text", "text": f"<instructions>\n{self.system_prompt}\n</instructions>"})
-            blocks.append({"type": "text", "text": text})
+            caps = self.agent_info.get("agentCapabilities", {}).get("promptCapabilities", {})
+            if caps.get("image"):
+                blocks.append({"type": "text", "text": text})
+                for path in images:
+                    mime, data = image_data(path)
+                    blocks.append({"type": "image", "mimeType": mime, "data": data})
+            else:
+                blocks.append({"type": "text", "text": with_paths(text, images)})
             self._first_prompt = False
             res = await self.request("session/prompt", {"sessionId": self.session_id, "prompt": blocks})
             stop = (res or {}).get("stopReason")

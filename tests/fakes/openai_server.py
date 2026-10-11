@@ -33,7 +33,9 @@ class FakeOpenAI:
             def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 fake.requests.append(body)
-                last = body["messages"][-1]
+                last = dict(body["messages"][-1])
+                if isinstance(last["content"], list):           # text + images: answer to the text
+                    last["content"] = "".join(p.get("text", "") for p in last["content"])
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
                 self.end_headers()
