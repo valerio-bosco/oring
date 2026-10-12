@@ -2,7 +2,7 @@
 connect to a Unix socket and exchange newline-delimited JSON.
 
 Client → daemon            {"op": ...}
-  hello                     → full "state" event
+  hello      remote?        → full "state" event; remote=true for chat gateways (see level.py)
   send       text, images?  start a turn with the active agent (images: paths of image files)
   cancel                    stop the running turn
   new                       start a new conversation
@@ -13,12 +13,15 @@ Client → daemon            {"op": ...}
   permission id, option     answer a permission request (option = optionId, or null to deny)
 
 Daemon → clients           {"ev": ...}, broadcast to every client
-  state      agents, active, busy, auto, language, history, permissions
+  state      agents[{id, name, type, sandboxed, remote}], active, busy, auto, language, history,
+             permissions, level ("sandbox" | "full"), level_until
+             (sandboxed: the agent runs in a sandbox at the current level; remote: chats may use it)
   append     role, text     new history entry (role: user | agent | tool | info | error)
   extend     text           streamed text appended to the last entry
   busy       value
   permission id, title, options[{id, name, kind}]
   permission_done id
+  refused    op, reason, agent   to that client only: a chat asked for a local-only agent
 """
 
 import asyncio
@@ -28,7 +31,7 @@ import os
 import signal
 import uuid
 
-from . import config, permissions
+from . import config, level, permissions
 from .backends import make_backend
 from .labels import describe
 
@@ -44,6 +47,8 @@ class Daemon:
         self.mcp = config.mcp_servers(cfg)
         self.agents = {a["id"]: make_backend(a, self) for a in cfg["agents"]}
         self.clients: set[asyncio.StreamWriter] = set()
+        self.remote_clients: set[asyncio.StreamWriter] = set()     # chat gateways
+        self.level = level.read()
         self.busy = False
         self.turn: asyncio.Task | None = None
         self.permissions: dict[str, dict] = {}
@@ -133,10 +138,18 @@ class Daemon:
             if not p["future"].done():
                 p["future"].set_result(None)
 
+    def remote_allowed(self, agent_id: str) -> bool:
+        """Chats may use an agent only if it runs sandboxed, unless the administrator set "full"."""
+        return level.current() == "full" or self.agents[agent_id].sandboxed
+
     def state(self) -> dict:
         return {
             "ev": "state",
-            "agents": [{"id": a["id"], "name": a["name"], "type": a["type"]} for a in self.cfg["agents"]],
+            "agents": [{"id": a["id"], "name": a["name"], "type": a["type"],
+                        "sandboxed": self.agents[a["id"]].sandboxed, "remote": self.remote_allowed(a["id"])}
+                       for a in self.cfg["agents"]],
+            "level": self.level["level"],
+            "level_until": self.level["until"],
             "active": self.active,
             "busy": self.busy,
             "auto": self.auto,
@@ -227,21 +240,49 @@ class Daemon:
             pass
         finally:
             self.clients.discard(writer)
+            self.remote_clients.discard(writer)
             writer.close()
+
+    async def _refuse_remote(self, writer, op: str, agent_id: str) -> bool:
+        """At the "sandbox" level, a chat must not start or select an unsandboxed agent."""
+        if writer not in self.remote_clients or self.remote_allowed(agent_id):
+            return False
+        log.warning("refused %s from a chat: agent %s is local-only at the sandbox level", op, agent_id)
+        line = {"ev": "refused", "op": op, "reason": "local_only", "agent": self.agents[agent_id].conf["name"]}
+        writer.write((json.dumps(line, ensure_ascii=False) + "\n").encode())
+        await writer.drain()
+        return True
+
+    async def watch_level(self):
+        """Clients see level changes (the checks themselves read the file when they happen)."""
+        while True:
+            await asyncio.sleep(2)
+            current = level.read()
+            if (current["level"], current["until"]) != (self.level["level"], self.level["until"]):
+                log.info("access level: %s → %s", self.level["level"], current["level"])
+                self.level = current
+                await self.broadcast(self.state())
 
     async def handle(self, msg: dict, writer: asyncio.StreamWriter):
         op = msg.get("op")
         if op == "hello":
+            if msg.get("remote"):
+                self.remote_clients.add(writer)
             writer.write((json.dumps(self.state(), ensure_ascii=False) + "\n").encode())
             await writer.drain()
         elif op == "send":
+            if await self._refuse_remote(writer, op, self.active):
+                return
             await self.send(str(msg.get("text", "")), [str(p) for p in msg.get("images") or []])
         elif op == "cancel":
             await self.cancel()
         elif op == "new":
             await self.new_conversation()
         elif op == "select":
-            await self.select(str(msg.get("agent", "")))
+            agent_id = str(msg.get("agent", ""))
+            if agent_id in self.agents and await self._refuse_remote(writer, op, agent_id):
+                return
+            await self.select(agent_id)
         elif op == "auto":
             self.auto = bool(msg.get("value"))
             self._save_state()
@@ -279,13 +320,15 @@ async def serve():
     path.unlink(missing_ok=True)
     server = await asyncio.start_unix_server(daemon.handle_client, path=str(path), limit=16 * 1024 * 1024)
     os.chmod(path, 0o600)
-    log.info("listening on %s (agents: %s)", path, ", ".join(daemon.agents))
+    log.info("listening on %s (agents: %s, level: %s)", path, ", ".join(daemon.agents), daemon.level["level"])
+    watcher = asyncio.create_task(daemon.watch_level())
 
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
     await stop.wait()
+    watcher.cancel()
     server.close()
     try:
         await asyncio.wait_for(daemon.shutdown(), 8)

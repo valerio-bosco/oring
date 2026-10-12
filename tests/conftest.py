@@ -1,6 +1,7 @@
 """Test fixtures: a real daemon process in an isolated environment (its own runtime, state and
 config directories), with fake agents. Nothing touches the user's session or desktop."""
 
+import json
 import os
 import subprocess
 import sys
@@ -45,8 +46,12 @@ def fake_acp_agent(id="fake", **extra):
 
 
 class DaemonProcess:
-    def __init__(self, tmp: Path, agents: list[dict], env: dict | None = None, **top):
+    def __init__(self, tmp: Path, agents: list[dict], env: dict | None = None, level: str | None = None, **top):
         self.tmp = tmp
+        # the access level (oring/level.py) comes from a file in the test dir, never /var/lib/oring
+        self.level_file = tmp / "level"
+        if level:
+            self.set_level(level)
         self.run = tmp / "run"
         self.run.mkdir(mode=0o700, exist_ok=True)
         self.config = tmp / "config.toml"
@@ -54,9 +59,11 @@ class DaemonProcess:
         top.setdefault("desktop_mcp", False)
         write_config(self.config, agents, **top)
         inherited = {k: v for k, v in os.environ.items()
-                     if k not in ("ORING_SOCKET", "ORING_DESKTOP_MCP", "ORING_BIN", "ORING_CONFIG")}
+                     if k not in ("ORING_SOCKET", "ORING_DESKTOP_MCP", "ORING_BIN", "ORING_CONFIG",
+                                  "ORING_LEVEL_FILE", "ORING_LEVEL_ANY_OWNER")}
         self.env = {**inherited, "XDG_RUNTIME_DIR": str(self.run), "XDG_STATE_HOME": str(tmp / "state"),
                     "ORING_CONFIG": str(self.config), "PYTHONPATH": str(ROOT), "ORING_LOG": "DEBUG",
+                    "ORING_LEVEL_FILE": str(self.level_file), "ORING_LEVEL_ANY_OWNER": "1",
                     **(env or {})}
         self.socket = self.run / "oring" / "daemon.sock"
         self.log = tmp / "daemon.log"
@@ -72,6 +79,13 @@ class DaemonProcess:
             if self.proc.poll() is not None or time.monotonic() > deadline:
                 raise RuntimeError("daemon did not start:\n" + self.log.read_text())
             time.sleep(0.05)
+
+    def set_level(self, value: str | None, until=None):
+        """Write the access level file as `oring admin` would (None: remove it, i.e. sandbox)."""
+        if value is None:
+            self.level_file.unlink(missing_ok=True)
+        else:
+            self.level_file.write_text(json.dumps({"level": value, "until": until, "set_by": "test", "set_at": 0}))
 
     def spawn(self, *args) -> subprocess.Popen:
         """Another oring process (e.g. `gateways`) in the same isolated environment."""

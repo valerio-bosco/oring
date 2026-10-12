@@ -18,7 +18,7 @@ python=${ORING_PYTHON:-$(nix build --no-link --print-out-paths .#dev-python)/bin
 
 stage "syntax"
 "$python" -m compileall -q oring mcp tests >/dev/null
-bash -n bin/oring scripts/check scripts/dev .githooks/commit-msg
+bash -n bin/oring bin/oring-level-helper scripts/check scripts/dev .githooks/commit-msg
 find . -name __pycache__ -prune -exec rm -rf {} +
 ok "python and shell scripts parse"
 

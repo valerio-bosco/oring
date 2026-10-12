@@ -1,4 +1,4 @@
-{ lib, stdenvNoCC, makeWrapper, python3, quickshell, tesseract
+{ lib, stdenvNoCC, makeWrapper, python3, quickshell, tesseract, coreutils
 , hyprland, grim, playerctl, libnotify, wtype, wlrctl, wl-clipboard
 , bubblewrap, socat
 }:
@@ -27,7 +27,16 @@ stdenvNoCC.mkDerivation {
       --set ORING_PYTHON ${python}/bin/python3 \
       --set-default ORING_QUICKSHELL ${quickshell}/bin/quickshell \
       --set-default ORING_DESKTOP_MCP "$out/bin/oring mcp" \
+      --set-default ORING_LEVEL_HELPER $out/libexec/oring-level-helper \
       --suffix PATH : ${lib.makeBinPath (desktopTools ++ sandboxTools)}
+
+    # access level (oring/level.py): root helper run by pkexec with a fixed PATH, and its polkit
+    # action (picked up by polkit when the package is in environment.systemPackages)
+    mkdir -p $out/libexec $out/share/polkit-1/actions
+    makeWrapper $out/share/oring/bin/oring-level-helper $out/libexec/oring-level-helper \
+      --set PATH ${lib.makeBinPath [ coreutils ]} --unset ORING_LEVEL_FILE
+    substitute ${./org.oring.set-level.policy} $out/share/polkit-1/actions/org.oring.set-level.policy \
+      --subst-var-by helper $out/libexec/oring-level-helper
     runHook postInstall
   '';
 

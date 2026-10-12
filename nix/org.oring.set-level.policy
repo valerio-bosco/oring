@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!-- Changing oring's access level (oring/level.py): admin password, local active session only.
+     allow_any=no refuses SSH and other remote sessions; allow_inactive=no refuses sessions that are
+     not in front of the user. -->
+<policyconfig>
+  <vendor>oring</vendor>
+  <action id="org.oring.set-level">
+    <description>Change the access level of oring's agents</description>
+    <description xml:lang="it">Cambiare il livello di accesso degli agenti di oring</description>
+    <message>Authentication is required to change what oring's agents may do (sandbox / full)</message>
+    <message xml:lang="it">Serve la password di amministratore per cambiare cosa possono fare gli agenti di oring (sandbox / full)</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">@helper@</annotate>
+  </action>
+</policyconfig>

@@ -44,6 +44,15 @@ correct entries that turn out wrong instead of adding contradictions.
   cannot even be asked for; outside_sandbox kept to harmless commands (each one is a way out);
   workdir ~/Projects is Claude's cwd, so the home is read-only to commands. Only Claude: other
   agents keep their own permission systems for now.
+- **D13 — Access level outside the user's reach** (maintainer's request, 2026-10-12). Everything
+  else oring keeps (auto mode, permissions.json, the socket) is owned by the user, so any process
+  running as the user (an unsandboxed agent) could change it. The level that unlocks remote power
+  is a root-owned file (/var/lib/oring/level, oring/level.py) changed with `oring admin` → pkexec →
+  root helper; polkit action org.oring.set-level: auth_admin for the active local session only
+  (allow_any/allow_inactive = no). "sandbox" (default): Claude sandboxed, chats only sandboxed
+  agents (refused in the daemon, `refused` event). "full": Claude without sandbox, every agent from
+  chats. No expiry by default (maintainer's choice), optional duration. Unknown/expired/not-root
+  file = sandbox. Checks read the file at the moment of use; a 2 s watcher only updates clients.
 - **D7 — Ollama with Vulkan** (`pkgs.ollama-vulkan`): the CUDA build is unfree, not in the binary
   cache, would compile for hours; GTX 1060 3 GB → models up to ~4B parameters.
 
@@ -98,6 +107,10 @@ correct entries that turn out wrong instead of adding contradictions.
 - **G19 — Edited chat messages do not move**: a live answer started before a permission request
   stayed above it, so the final text looked missing. The live message is closed at each request
   and the answer continues in a new message below (`_ask_permission`).
+- **G21 — The level helper ignores ORING_LEVEL_FILE when wrapped** (`--unset` in the Nix wrapper,
+  and pkexec clears the environment anyway): running `$out/libexec/oring-level-helper` as root
+  writes the real /var/lib/oring/level. Test the unwrapped `bin/oring-level-helper` with the env
+  variable instead (tests/test_level.py does).
 - **G20 — Deny rules are not a sandbox**: Claude Code applies `Read(path)` deny rules to Read and
   also refused `cat` of a protected file in Bash (live check, 2.1.296), but other programs (python,
   scripts) could still open files: real isolation would need Claude Code's sandbox (bubblewrap).
@@ -155,3 +168,6 @@ correct entries that turn out wrong instead of adding contradictions.
   network; IPC `access`), screenshot-checked on the dev instance; scripts/check full green. Not
   deployed yet. Gotcha: a panel started from an agent's Bash dies when the command returns; run it
   as a background task for visual checks.
+- 2026-10-12 — Access level (D13, S8): oring/level.py, `oring admin`, root helper + polkit action,
+  NixOS module, daemon refuses local-only agents to chats, level in state/panel badge/Telegram
+  (/status, change announced). 134 tests; real polkit flow pending (needs the maintainer).

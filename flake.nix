@@ -19,6 +19,7 @@
       });
 
       homeManagerModules.default = import ./nix/hm-module.nix self;
+      nixosModules.default = import ./nix/nixos-module.nix self;
 
       # `nix flake check`: the package builds and the test suite passes (fake agents only)
       checks = forAll (pkgs: {

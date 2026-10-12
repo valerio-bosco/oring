@@ -36,7 +36,12 @@ STRINGS = {
         "new": "Nuova conversazione con {agent}.", "stopped": "Interrotto.", "nothing": "Niente da interrompere.",
         "pick": "Agente attivo: {agent}. Scegline un altro (inizia una nuova conversazione):",
         "selected": "Agente: {agent}. Nuova conversazione.",
-        "status": "Agente: {agent}\nStato: {state}\nModalità auto: {auto}\nMessaggi nella conversazione: {count}",
+        "status": "Agente: {agent}\nStato: {state}\nModalità auto: {auto}\nLivello di accesso: {level}\n"
+                  "Messaggi nella conversazione: {count}",
+        "local_only": "🔒 {agent} si può usare solo dal PC finché il livello di accesso è «sandbox» "
+                      "(si sblocca al PC con: oring admin full).",
+        "level_sandbox": "sandbox 🛡", "level_full": "full ⚠ (tutti gli agenti, Claude senza sandbox)",
+        "level_changed": "🔐 Livello di accesso cambiato dal PC: {level}",
         "working": "sta lavorando", "idle": "pronto", "permission": "🔐 Richiesta di permesso",
         "answered": "risposto", "answered_elsewhere": "risposto da un altro dispositivo",
         "done": "✓ Fatto.", "offline": "Il daemon di oring non è raggiungibile.",
@@ -53,7 +58,12 @@ STRINGS = {
         "new": "New conversation with {agent}.", "stopped": "Stopped.", "nothing": "Nothing to stop.",
         "pick": "Active agent: {agent}. Pick another one (starts a new conversation):",
         "selected": "Agent: {agent}. New conversation.",
-        "status": "Agent: {agent}\nState: {state}\nAuto mode: {auto}\nMessages in the conversation: {count}",
+        "status": "Agent: {agent}\nState: {state}\nAuto mode: {auto}\nAccess level: {level}\n"
+                  "Messages in the conversation: {count}",
+        "local_only": "🔒 {agent} can only be used at the computer while the access level is \"sandbox\" "
+                      "(unlock it at the computer with: oring admin full).",
+        "level_sandbox": "sandbox 🛡", "level_full": "full ⚠ (every agent, Claude without sandbox)",
+        "level_changed": "🔐 Access level changed at the computer: {level}",
         "working": "working", "idle": "ready", "permission": "🔐 Permission request",
         "answered": "answered", "answered_elsewhere": "answered on another device",
         "done": "✓ Done.", "offline": "The oring daemon is unreachable.",
@@ -122,6 +132,7 @@ class Gateway:
         self.permissions: dict[str, dict] = {}   # id → {options, messages: [(chat, ref)]}
         self.connected = asyncio.Event()
         self.state_seen = asyncio.Event()
+        self.last_chat: str | None = None         # where to answer events that are not part of a turn
 
     def tr(self, key: str, **kw) -> str:
         return STRINGS.get(self.state["language"], STRINGS["en"])[key].format(**kw)
@@ -154,7 +165,7 @@ class Gateway:
                 await asyncio.sleep(2)
                 continue
             log.info("%s: connected to the daemon", self.name)
-            await self.op("hello")
+            await self.op("hello", remote=True)      # the daemon limits what chats may do (level.py)
             self.connected.set()
             try:
                 while line := await reader.readline():
@@ -213,6 +224,7 @@ class Gateway:
         if inc.chat not in self.allowed:
             log.warning("%s: ignored message from unauthorized chat %s", self.name, inc.chat)
             return
+        self.last_chat = inc.chat
         if not self.connected.is_set():
             await self.send(inc.chat, self.tr("offline"))
             return
@@ -245,7 +257,8 @@ class Gateway:
             else:
                 await self.send(chat, self.tr("nothing"))
         elif cmd == "agent":
-            buttons = [[(("● " if a["id"] == self.state["active"] else "") + a["name"], f"a:{a['id']}")]
+            buttons = [[(("● " if a["id"] == self.state["active"] else "")
+                         + ("" if a.get("remote", True) else "🔒 ") + a["name"], f"a:{a['id']}")]
                        for a in self.state["agents"]]
             await self.send(chat, self.tr("pick", agent=self.agent_name()), buttons)
         elif cmd == "auto":
@@ -254,7 +267,8 @@ class Gateway:
         elif cmd == "status":
             await self.send(chat, self.tr("status", agent=self.agent_name(), count=len(self.state["history"]),
                                           state=self.tr("working" if self.state["busy"] else "idle"),
-                                          auto="on" if self.state["auto"] else "off"))
+                                          auto="on" if self.state["auto"] else "off",
+                                          level=self.tr(f"level_{self.state.get('level', 'sandbox')}")))
         else:
             await self.send(chat, self.tr("help"))
 
@@ -283,9 +297,20 @@ class Gateway:
         kind = ev["ev"]
         log.debug("%s: event %s", self.name, {k: (v if k != "history" else len(v)) for k, v in ev.items()})
         if kind == "state":
+            previous = self.state.get("level")
             self.state.update({k: ev[k] for k in ("agents", "active", "busy", "language", "history")})
             self.state["auto"] = ev.get("auto", False)
+            self.state["level"] = ev.get("level", "sandbox")
             self.state_seen.set()
+            if previous and previous != self.state["level"]:      # security-relevant: always tell the chats
+                for chat in sorted(self.allowed):
+                    await self.send(chat, self.tr("level_changed", level=self.tr(f"level_{self.state['level']}")))
+        elif kind == "refused":
+            chat = self.pending_chat or self.last_chat
+            self.pending_chat = None
+            self.state_seen.set()                  # a refused select brings no new state
+            if chat:
+                await self.send(chat, self.tr("local_only", agent=ev.get("agent", "?")))
         elif kind == "busy":
             self.state["busy"] = ev["value"]
             if ev["value"] and self.pending_chat:

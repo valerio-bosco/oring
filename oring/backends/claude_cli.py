@@ -10,6 +10,7 @@ Options:  command (default "claude"), allowed_tools (default: the MCP servers + 
           permission_mode: Claude Code's --permission-mode when auto mode (daemon op "auto") is off,
           sandbox (default true): Bash runs in Claude Code's sandbox, configured from
           permissions.json (see oring/permissions.py); the working directory is its workdir.
+          At the "full" access level (oring/level.py, set by an administrator) the sandbox is off.
 """
 
 import asyncio
@@ -17,7 +18,7 @@ import json
 import os
 
 from . import Backend, StderrTail, which, with_paths
-from .. import config, permissions
+from .. import config, level, permissions
 from ..labels import describe
 
 class ClaudeCliBackend(Backend):
@@ -30,11 +31,17 @@ class ClaudeCliBackend(Backend):
 
     @property
     def sandbox(self) -> bool:
-        return self.conf.get("sandbox", True)
+        # read at every turn: going back to "sandbox" applies to the very next turn
+        return self.conf.get("sandbox", True) and level.current() != "full"
+
+    @property
+    def sandboxed(self) -> bool:
+        return self.sandbox
 
     @property
     def cwd(self) -> str:
-        if self.sandbox and "cwd" not in self.conf:
+        # the workdir does not depend on the level: same directory, so --resume keeps working
+        if self.conf.get("sandbox", True) and "cwd" not in self.conf:
             workdir = os.path.expanduser(permissions.load()["workdir"])
             os.makedirs(workdir, exist_ok=True)
             return workdir

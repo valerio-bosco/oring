@@ -11,6 +11,7 @@ import Quickshell.Wayland
 ShellRoot {
     id: root
 
+    property string level: "sandbox"     // access level set by the administrator (oring admin)
     property bool open: false
     property bool busy: false
     property bool connected: false
@@ -119,6 +120,7 @@ ShellRoot {
         switch (ev.ev) {
         case "state":
             agents = ev.agents; active = ev.active; busy = ev.busy; language = ev.language;
+            level = ev.level || "sandbox";
             messages.clear();
             for (const h of ev.history) messages.append({ role: h.role, text: localize(h.role, h.text) });
             permissions.clear();
@@ -313,6 +315,23 @@ ShellRoot {
                         font.pixelSize: 13
                         elide: Text.ElideRight
                         Layout.fillWidth: true
+                    }
+                    // access level (oring admin): full = Claude without sandbox, every agent from the chats
+                    Rectangle {
+                        visible: root.connected
+                        implicitWidth: levelText.implicitWidth + 16
+                        implicitHeight: 24
+                        radius: 12
+                        color: root.level === "full" ? Qt.rgba(root.cError.r, root.cError.g, root.cError.b, 0.18)
+                                                     : root.cSurf
+                        Text {
+                            id: levelText
+                            anchors.centerIn: parent
+                            text: root.level === "full" ? "⚠ full" : "🛡 sandbox"
+                            color: root.level === "full" ? root.cError : root.cSubtle
+                            font.family: root.fontFamily
+                            font.pixelSize: 11
+                        }
                     }
                     PillButton {
                         label: root.tr("access")

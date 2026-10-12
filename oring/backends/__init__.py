@@ -49,6 +49,11 @@ class Backend:
         return env
 
     @property
+    def sandboxed(self) -> bool:
+        """Runs in a sandbox at the current access level (only claude-cli can, see level.py)."""
+        return False
+
+    @property
     def cwd(self) -> str:
         return os.path.expanduser(self.conf.get("cwd", "~"))
 

@@ -57,6 +57,11 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[-]` dropped (s
   button, IPC `access`), checked by screenshot on the dev instance.
 - [ ] **S5 Prompt-injection hygiene**: mark tool results from the web/clipboard/OCR as untrusted in
   the system prompt; never auto-approve; document the residual risk in README.
+- [~] **S8 Access level set by an administrator**: "sandbox" (default) / "full" in a root-owned file,
+  changed with `oring admin full|sandbox` through polkit (admin password, local active session
+  only); at "sandbox" chats only use sandboxed agents, at "full" Claude runs without sandbox and
+  chats use every agent. Done when: tests, NixOS module, real polkit check by the maintainer.
+  → 2026-10-12: implemented (D13), 134 tests green; waiting for deployment + live check.
 - [ ] **S6 Headless availability**: daemon + gateways reachable after a reboot before login
   (linger, or a session-independent target; desktop tools then report "no graphical session").
 

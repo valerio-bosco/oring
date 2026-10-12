@@ -156,3 +156,16 @@ def test_without_sandbox_deny_rules_only(daemon, tmp_path):
     args = calls(log)[0]
     assert "--settings" not in args
     assert "Read(~/.ssh/**)" in args[args.index("--disallowedTools") + 1:]
+
+
+def test_full_level_turns_the_sandbox_off(daemon, tmp_path):
+    d, log = setup(daemon, tmp_path)
+    with d.client() as c:
+        assert c.state()["agents"][0]["sandboxed"] is True
+        c.turn("sandboxed")
+        d.set_level("full")
+        c.turn("full")
+        assert c.state()["agents"][0]["sandboxed"] is False
+    sandboxed, full = calls(log)
+    assert "--settings" in sandboxed and "--disallowedTools" not in sandboxed
+    assert "--settings" not in full and "--disallowedTools" in full   # secrets still denied to Read/Edit

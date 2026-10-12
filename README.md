@@ -38,6 +38,10 @@ through Ollama) and let it act on the desktop.
 - **Safe when the screen is locked.** Mouse and keyboard tools refuse while the session is locked
   (they would type into the lock screen); screenshots and OCR of a specific window keep working,
   even on another workspace, so remote use can still see what apps show.
+- **Access level only an administrator at the machine can raise.** By default (`sandbox`) chats may
+  only use sandboxed agents; `oring admin full` (polkit: admin password, local session only, never
+  from SSH, a chat or an agent) unlocks every agent and Claude without sandbox. The level lives in
+  a root-owned file the agents cannot touch.
 - **Persistent conversation.** It survives closing the panel and restarting the daemon (and
   Claude sessions are resumed).
 - **Messaging gateways: use it from your phone.** Telegram today (no open ports: long polling);
@@ -83,6 +87,12 @@ to `settings.gateways`, message the bot to get your chat id, put it in `allowed_
 and `bin/oring ui` with Python 3.11+ (`mcp`, `httpx`) and Quickshell available.
 
 Sign in to each agent once from a terminal (`claude`, `gemini`, `codex login`, …).
+
+**Access level** (NixOS): import `inputs.oring.nixosModules.default` and set
+`programs.oring.admin.enable = true`. The level starts at `sandbox`; at the computer,
+`oring admin full` (admin password, asked by polkit only to the local session) gives the chats
+every agent and Claude without sandbox, until `oring admin sandbox` (or `oring admin full 2h`).
+`oring admin` alone shows the current level.
 
 ## Commands
 

@@ -15,12 +15,14 @@ oring/daemon.py         daemon: conversation, clients, permissions, confirmation
 oring/backends/         claude_cli.py (claude -p), acp.py (Agent Client Protocol), openai.py (chat completions)
 oring/client.py         sync socket client: `oring send/state/select/new/cancel`, tests, skills
 oring/gateways/         messaging gateways: base.py (platform-independent), telegram.py (adapter)
+oring/level.py          access level sandbox/full: root-owned file, changed by `oring admin` (pkexec)
+bin/oring-level-helper  the root helper behind `oring admin`; nix/org.oring.set-level.policy (polkit)
 oring/config.py         config.toml loading, paths (socket, state)
 oring/labels.py         human-readable tool-call labels (it/en)
 mcp/desktop_mcp.py      desktop MCP server (Hyprland 0.56 Lua dispatchers, serpantinum IPC); risky tools gated
 mcp/permission_mcp.py   Claude Code permission prompt → panel
 bin/oring               launcher (daemon, ui, toggle, ask, mcp, permission-mcp, control commands)
-nix/                    package + home-manager module;  flake.nix: packages, checks, devShell
+nix/                    package + home-manager module + NixOS module (access level);  flake.nix: packages, checks, devShell
 tests/                  pytest suite with fake agents (tests/fakes/), never touches the real desktop
 scripts/check           the pipeline;  scripts/dev: isolated development instance
 ```

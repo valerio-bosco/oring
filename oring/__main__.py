@@ -7,6 +7,7 @@
   select AGENT                   switch agent (starts a new conversation)
   new                            start a new conversation
   cancel                         stop the running turn
+  level                          print the access level (see level.py; change it with `oring admin`)
 """
 
 import json
@@ -36,6 +37,18 @@ def main():
         import asyncio
         from .gateways import serve as serve_gateways
         asyncio.run(serve_gateways())
+        return
+
+    if cmd == "level":
+        import time
+        from . import level
+        lv = level.read()
+        until = f" until {time.strftime('%Y-%m-%d %H:%M', time.localtime(lv['until']))}" if lv["until"] else ""
+        by = f" (set by {lv['set_by']} on {time.strftime('%Y-%m-%d %H:%M', time.localtime(lv['set_at']))})" \
+            if lv["set_by"] and lv["set_at"] else ""
+        print(f"access level: {lv['level']}{until}{by}")
+        print("  sandbox: Claude in its sandbox; chats may only use sandboxed agents" if lv["level"] == "sandbox"
+              else "  full: Claude without sandbox; chats may use every agent")
         return
 
     if cmd == "send" and len(args) > 1:

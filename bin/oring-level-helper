@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Writes the oring access level (see oring/level.py). Runs as root through pkexec, started by
+# `oring admin`; polkit allows it only to the local active session with the admin password
+# (org.oring.set-level). Arguments are validated strictly: this script runs as root.
+#
+#   oring-level-helper sandbox
+#   oring-level-helper full [DURATION]      DURATION: 30m, 2h, 1d… (default: until changed back)
+set -euo pipefail
+umask 022
+file=${ORING_LEVEL_FILE:-/var/lib/oring/level}
+
+level=${1:-}
+duration=${2:-}
+[[ $level == sandbox || $level == full ]] || { echo "usage: oring-level-helper sandbox | full [30m|2h|1d]" >&2; exit 2; }
+[ $# -le 2 ] || { echo "too many arguments" >&2; exit 2; }
+
+now=$(date +%s)
+until=null
+if [ -n "$duration" ]; then
+  [ "$level" = full ] || { echo "a duration only makes sense with 'full'" >&2; exit 2; }
+  [[ $duration =~ ^([1-9][0-9]{0,4})([mhd])$ ]] || { echo "duration: a number followed by m, h or d (e.g. 2h)" >&2; exit 2; }
+  n=${BASH_REMATCH[1]}
+  case ${BASH_REMATCH[2]} in m) s=60 ;; h) s=3600 ;; d) s=86400 ;; esac
+  until=$((now + n * s))
+fi
+
+# who asked: pkexec sets PKEXEC_UID (only digits are trusted)
+by=unknown
+if [[ ${PKEXEC_UID:-} =~ ^[0-9]+$ ]]; then by=$(id -nu "$PKEXEC_UID" 2>/dev/null || echo "$PKEXEC_UID"); fi
+[[ $by =~ ^[A-Za-z0-9._-]+$ ]] || by=unknown
+
+mkdir -p "$(dirname "$file")"
+tmp=$(mktemp "$file.XXXXXX")
+printf '{"level": "%s", "until": %s, "set_by": "%s", "set_at": %s}\n' "$level" "$until" "$by" "$now" > "$tmp"
+chmod 644 "$tmp"
+mv -f "$tmp" "$file"
+echo "oring: access level is now '$level'$([ "$until" != null ] && echo " until $(date -d "@$until" '+%Y-%m-%d %H:%M')")"

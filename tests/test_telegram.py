@@ -15,8 +15,9 @@ def telegram(daemon, tmp_path):
     token = tmp_path / "token"
     token.write_text(TOKEN + "\n")
 
-    def start(allowed=(ME,), agents=None, **options):
-        d = daemon(agents or [fake_acp_agent("a"), fake_acp_agent("b")],
+    def start(allowed=(ME,), agents=None, level="full", **options):
+        # "full": the fake agents are not sandboxed, chats may use them only at that level
+        d = daemon(agents or [fake_acp_agent("a"), fake_acp_agent("b")], level=level,
                    gateways=[{"type": "telegram", "token_file": str(token), "api_url": api.url,
                               "allowed_chats": list(allowed), **options}])
         d.spawn("gateways")
@@ -237,3 +238,28 @@ def test_auto_command(telegram):
     api.wait_for(lambda t: t.find(ME, "Auto mode: on"))
     api.user_says(ME, "/auto")
     api.wait_for(lambda t: t.find(ME, "Auto mode off"))
+
+
+def test_sandbox_level_locks_unsandboxed_agents(telegram):
+    api, start = telegram
+    d = start(level=None)
+    api.user_says(ME, "/agent")
+    mid = api.wait_for(lambda t: t.find(ME, "Fake"))
+    assert all(label.endswith("🔒 Fake") for label, _ in api.messages[mid]["buttons"])
+    api.user_presses(ME, mid, "a:b")
+    api.wait_for(lambda t: t.find(ME, "only be used at the computer"))
+    api.user_says(ME, "hello")
+    api.wait_for(lambda t: len([m for m in t.texts(ME) if "only be used at the computer" in m]) == 2)
+    with d.client() as c:
+        assert c.state()["history"] == []
+    api.user_says(ME, "/status")
+    api.wait_for(lambda t: t.find(ME, "Access level: sandbox"))
+
+
+def test_level_change_is_announced(telegram):
+    api, start = telegram
+    d = start(level=None)
+    d.set_level("full")
+    api.wait_for(lambda t: t.find(ME, "Access level changed at the computer: full"))
+    api.user_says(ME, "hello")
+    api.wait_for(lambda t: t.find(ME, "echo 1: hello"))

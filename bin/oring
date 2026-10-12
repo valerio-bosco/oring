@@ -8,6 +8,8 @@
 #   oring ask <text>      open the panel and send a message
 #   oring send [--auto allow|deny] <text>   send from the terminal and print the answer
 #   oring state | select <agent> | new | cancel
+#   oring admin [status | full [30m|2h|1d] | sandbox]   access level, see oring/level.py
+#                         (changing it asks the admin password, only at the computer: polkit)
 #   oring mcp             run the desktop MCP server (for other MCP clients, e.g. `claude mcp add`)
 set -euo pipefail
 
@@ -24,6 +26,15 @@ case "${1:-}" in
   ui)     exec "$quickshell" "${ui[@]}" ;;
   toggle|open|close) exec "$quickshell" "${ui[@]}" ipc call oring "$1" ;;
   ask)    shift; exec "$quickshell" "${ui[@]}" ipc call oring ask "$*" ;;
+  admin)
+    shift
+    case "${1:-status}" in
+      status) PYTHONPATH="$share${PYTHONPATH:+:$PYTHONPATH}" exec "$python" -m oring level ;;
+      full|sandbox)
+        # pkexec: polkit asks the admin password, and only to the local active session
+        exec pkexec "${ORING_LEVEL_HELPER:-$share/bin/oring-level-helper}" "$@" ;;
+      *) echo "usage: oring admin [status | full [30m|2h|1d] | sandbox]" >&2; exit 2 ;;
+    esac ;;
   permission-mcp) exec "$python" "$share/mcp/permission_mcp.py" ;;
   mcp)
     # Started outside the graphical session (e.g. from a root shell): find the user's running
@@ -39,5 +50,5 @@ case "${1:-}" in
       fi
     fi
     exec "$python" "$share/mcp/desktop_mcp.py" ;;
-  *) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
