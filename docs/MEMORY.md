@@ -170,4 +170,4 @@ correct entries that turn out wrong instead of adding contradictions.
   as a background task for visual checks.
 - 2026-10-12 — Access level (D13, S8): oring/level.py, `oring admin`, root helper + polkit action,
   NixOS module, daemon refuses local-only agents to chats, level in state/panel badge/Telegram
-  (/status, change announced). 134 tests; real polkit flow pending (needs the maintainer).
+  (/status, change announced). 134 tests; deployed, polkit flow confirmed by the maintainer.
